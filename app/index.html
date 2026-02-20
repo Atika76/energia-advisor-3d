@@ -1,1 +1,70 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Energia Advisor 3D – MVP</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <div class="logo">EA</div>
+      <div>
+        <div class="title">Energia Advisor 3D</div>
+        <div class="subtitle">MVP • külön repo • később SzakiPiacba integrálható</div>
+      </div>
+    </div>
 
+    <nav class="nav">
+      <button id="btnHome" class="btn active">Kezdő</button>
+      <button id="btnCalc" class="btn">Kalkulátor</button>
+      <button id="btn3d" class="btn">3D nézet</button>
+      <button id="btnDocs" class="btn">Tudástár</button>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section id="viewHome" class="card">
+      <h1>Üdv! 👷‍♂️🏠</h1>
+      <p>
+        Ez egy különálló projekt: <b>energiahatékonysági tanácsadás + kalkulátor + 3D megtekintés</b>.
+        Most még csak a váz van kész, lépésről lépésre építjük fel.
+      </p>
+      <ul>
+        <li><b>1. kör:</b> struktúra + működő weboldal (GitHub Pages)</li>
+        <li><b>2. kör:</b> alap kalkulátor (fal/födém/nyílászáró/fűtés prioritás)</li>
+        <li><b>3. kör:</b> egyszerű 3D “dobozház” nézet (látvány)</li>
+        <li><b>4. kör:</b> tervrajz/kép input (később)</li>
+      </ul>
+      <p class="muted">
+        Fontos: ez döntéstámogatás, nem hivatalos energetikai tanúsítás.
+      </p>
+    </section>
+
+    <section id="viewCalc" class="card hidden">
+      <h2>Alap kalkulátor (következő lépés)</h2>
+      <p class="muted">Itt lesz a gyors felmérés + prioritási lista + megtérülés becslés.</p>
+      <div class="placeholder">Következő lépésben ide építjük be.</div>
+    </section>
+
+    <section id="view3d" class="card hidden">
+      <h2>3D nézet (később)</h2>
+      <p class="muted">Itt lesz a 3D megtekintés (Three.js) – először egyszerű “dobozház”.</p>
+      <div class="placeholder">Következő-következő lépésben.</div>
+    </section>
+
+    <section id="viewDocs" class="card hidden">
+      <h2>Tudástár (később)</h2>
+      <p class="muted">Rövid, érthető cikkek: mire figyelj, tipikus hibák, kérdéslista szakiknak.</p>
+      <div class="placeholder">Később ide jönnek a cikkek.</div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>Energia Advisor 3D • MVP</span>
+  </footer>
+
+  <script src="./main.js"></script>
+</body>
+</html>
