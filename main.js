@@ -1,511 +1,581 @@
-/* Energia Advisor 3D – C verzió (valósabb fizikai becslés)
-   Modell:
-   - Transzmissziós veszteség: H = Σ(U*A)
-   - Szellőzés/infiltráció: H_vent = 0.33 * n * V
-   - Éves hőigény: Q = (H + H_vent) * HDD * 24 / 1000  (kWh/év)
-   - Költség: gáz: Q/η * ár; hőszivattyú: Q/SCOP * ár
-
-   Fontos: a "MOST fűtési költség" a bázis, abból kalibrálunk vissza "MOST hőigényt",
-   így a felhasználó valós számaira támaszkodunk.
+/* Energia Advisor 3D – Valós (C) kalkulátor
+   - UA + infiltráció + HDD
+   - Kalibrálás: a MOST Ft/év értéket bázisnak vesszük (hogy a modell "valós" legyen)
 */
 
 (function () {
-  // ---------- NAV ----------
-  const views = {
-    home: document.getElementById("viewHome"),
-    calc: document.getElementById("viewCalc"),
-    v3d: document.getElementById("view3d"),
-    docs: document.getElementById("viewDocs"),
-  };
-  const btnHome = document.getElementById("btnHome");
-  const btnCalc = document.getElementById("btnCalc");
-  const btn3d = document.getElementById("btn3d");
-  const btnDocs = document.getElementById("btnDocs");
-
-  function setActive(tab) {
-    // buttons
-    [btnHome, btnCalc, btn3d, btnDocs].forEach(b => b.classList.remove("active"));
-    // views
-    Object.values(views).forEach(v => (v.style.display = "none"));
-
-    if (tab === "home") { btnHome.classList.add("active"); views.home.style.display = ""; }
-    if (tab === "calc") { btnCalc.classList.add("active"); views.calc.style.display = ""; }
-    if (tab === "v3d") { btn3d.classList.add("active"); views.v3d.style.display = ""; }
-    if (tab === "docs") { btnDocs.classList.add("active"); views.docs.style.display = ""; }
-  }
-  btnHome.addEventListener("click", () => setActive("home"));
-  btnCalc.addEventListener("click", () => setActive("calc"));
-  btn3d.addEventListener("click", () => setActive("v3d"));
-  btnDocs.addEventListener("click", () => setActive("docs"));
-  setActive("calc");
-
-  // ---------- HELPERS ----------
   const $ = (id) => document.getElementById(id);
 
-  const fmtFt = (n) => {
-    if (!isFinite(n)) return "—";
-    return Math.round(n).toLocaleString("hu-HU") + " Ft";
-  };
-  const fmtFtYr = (n) => `${fmtFt(n)}/év`;
-  const fmtFtMo = (n) => `${fmtFt(n)}/hó`;
-  const fmtKwh = (n) => {
-    if (!isFinite(n)) return "—";
-    return Math.round(n).toLocaleString("hu-HU") + " kWh/év";
-  };
-  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  // NAV
+  const btnHome = $("btnHome");
+  const btnCalc = $("btnCalc");
+  const btn3d = $("btn3d");
+  const btnDocs = $("btnDocs");
 
-  function readNum(id) {
-    const v = parseFloat($(id).value);
-    return isFinite(v) ? v : 0;
-  }
-  function readStr(id) {
-    return ($(id).value || "").toString();
+  const viewHome = $("viewHome");
+  const viewCalc = $("viewCalc");
+  const view3d = $("view3d");
+  const viewDocs = $("viewDocs");
+
+  const homeGoCalc = $("homeGoCalc");
+  const homeGoDocs = $("homeGoDocs");
+
+  function setActive(btn) {
+    [btnHome, btnCalc, btn3d, btnDocs].forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
   }
 
-  // ---------- MATERIALS ----------
-  const lambda = {
-    eps: 0.039,
-    rockwool: 0.037,
+  function showView(which) {
+    viewHome.style.display = which === "home" ? "" : "none";
+    viewCalc.style.display = which === "calc" ? "" : "none";
+    view3d.style.display = which === "3d" ? "" : "none";
+    viewDocs.style.display = which === "docs" ? "" : "none";
+
+    if (which === "home") setActive(btnHome);
+    if (which === "calc") setActive(btnCalc);
+    if (which === "3d") setActive(btn3d);
+    if (which === "docs") setActive(btnDocs);
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
+  btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
+  btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
+
+  if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
+
+  function initByHash() {
+    const h = (location.hash || "#home").replace("#", "");
+    if (h === "calc") return showView("calc");
+    if (h === "3d") return showView("3d");
+    if (h === "docs") return showView("docs");
+    return showView("home");
+  }
+  window.addEventListener("hashchange", initByHash);
+  initByHash();
+
+  // ---------- Helpers ----------
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const num = (v, fallback = 0) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : fallback;
+  };
+
+  function fmtFt(v) {
+    const n = Math.round(v);
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " Ft";
+  }
+  function fmtFtShort(v) {
+    const n = Math.round(v);
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+  function fmtKwh(v) {
+    const n = Math.round(v);
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " kWh/év";
+  }
+  function fmtPct(v) {
+    return (Math.round(v * 10) / 10).toFixed(1) + "%";
+  }
+  function paybackYears(cost, savingPerYear) {
+    if (savingPerYear <= 0) return Infinity;
+    return cost / savingPerYear;
+  }
+  function fmtYears(y) {
+    if (!Number.isFinite(y)) return "–";
+    if (y > 99) return "99+ év";
+    return (Math.round(y * 10) / 10).toFixed(1) + " év";
+  }
+
+  // ---------- Material lambdas (W/mK) ----------
+  const LAMBDA = {
+    eps: 0.037,
+    rockwool: 0.039,
     xps: 0.034
   };
 
-  // Tipikus kiinduló U értékek szigeteletlen falra (nagyon durva, átlagos magyar régi)
-  const baseUWall = {
-    brick: 1.25,
-    adobe: 1.05,
-    concrete: 1.70
+  // Base U-values (W/m²K) for "régi" szerkezetek (nagyon tipikus közelítés)
+  // (Ezeket a szigetelés hozzáadásával javítjuk.)
+  const U_BASE = {
+    brick: 1.25,     // régi tégla
+    adobe: 1.10,     // vályog
+    concrete: 1.60,  // panel/beton
+    roof: 1.60,      // födém/padlás szig nélkül
+    floor: 1.10,     // aljzat/padló szig nélkül
+    window: 2.60     // régi/átlag ablak
   };
 
-  // Tipikus kiinduló U értékek szigeteletlen födémre/padlásra és padlóra
-  const baseURoof = 1.60;  // padlásfödém szigeteletlen
-  const baseUFloor = 1.10; // talajon fekvő padló szigeteletlen
-  const baseUWindow = 2.60; // régi/átlagos vegyes ablak (ha nincs adat)
+  // fűtés hatásfok / COP
+  const HEAT = {
+    gas_old: { name: "Régi gázkazán", eff: 0.75 },  // hasznos hő / gáz energia
+    gas_cond: { name: "Kondenzációs gázkazán", eff: 0.92 },
+    hp: { name: "Hőszivattyú", eff: null } // COP/SCOP adja
+  };
 
-  // Belső/külső felületi ellenállások (m²K/W) – tipikus
-  const Rsi = 0.13;
-  const Rse = 0.04;
+  function uWithInsulation(uBase, thicknessCm, lambda) {
+    const t = Math.max(0, thicknessCm) / 100; // m
+    if (t <= 0) return uBase;
 
-  // Hőhíd korrekció: H_total = H * (1 + bridge%)
-  function applyBridge(H, bridgePercent) {
-    return H * (1 + clamp(bridgePercent, 0, 25) / 100);
+    // R_total = 1/U_base + t/lambda
+    const r0 = 1 / uBase;
+    const rIns = t / lambda;
+    const u = 1 / (r0 + rIns);
+    return u;
   }
 
-  // U számítás: a kiinduló U0 alapján visszafejtjük a "szerkezet R"-t, és hozzáadjuk az ins R-t
-  function U_after_insulation(U0, insCm, matKey) {
-    const insM = Math.max(0, insCm) / 100;
-    const lam = lambda[matKey] || lambda.eps;
+  function geometry(areaTotal, storeys, height) {
+    const s = clamp(storeys, 1, 3);
+    const footprint = areaTotal / s; // m²
+    const side = Math.sqrt(Math.max(footprint, 1));
+    const perim = 4 * side;
 
-    // U0 = 1 / (Rsi + R_struct + Rse)
-    // => R_struct = 1/U0 - Rsi - Rse
-    const R_struct = Math.max(0.001, (1 / U0) - Rsi - Rse);
-    const R_ins = insM > 0 ? (insM / lam) : 0;
+    const wallGross = perim * height * s;          // m²
+    const roofArea = footprint;                    // m²
+    const floorArea = footprint;                   // m²
+    const volume = footprint * height * s;         // m³
 
-    const R_total = Rsi + R_struct + R_ins + Rse;
-    return 1 / R_total;
+    return { footprint, side, perim, wallGross, roofArea, floorArea, volume };
   }
 
-  // ---------- GEOMETRY APPROX ----------
-  // Szigorúan pontos felületekhez alaprajz kell. Itt "négyzet alapú" becslést adunk:
-  // Alapterület A -> oldal = sqrt(A) -> kerület = 4*oldal
-  // Fal felület = kerület * belmagasság * szintek
-  // Ablak felület = fal felület * (winRatio/100)
-  // Tető/födém felület ~ alapterület (felső födém)
-  // Padló felület ~ alapterület (talaj felé)
-  function estimateAreas(areaFloor, storeys, height, winRatioPercent) {
-    const A = Math.max(20, areaFloor);
-    const s = Math.sqrt(A);
-    const perimeter = 4 * s;
-
-    const wallGross = perimeter * height * storeys; // m²
-    const winRatio = clamp(winRatioPercent, 5, 35) / 100;
-    const Awin = wallGross * winRatio;
-    const AwallNet = Math.max(0, wallGross - Awin);
-
-    // Felső födém felülete: egyszerűsítés
-    const Aroof = A; // m²
-    const Afloor = A; // m²
-
-    const V = A * height * storeys; // m³
-
-    return { AwallNet, Awin, Aroof, Afloor, V, wallGross };
+  function heatLossH(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct) {
+    const Htrans = (Uwall * Awall) + (Uwin * Awin) + (Uroof * Aroof) + (Ufloor * Afloor);
+    const Hvent = 0.33 * nAir * volume; // W/K (kb)
+    const bridge = 1 + (bridgePct / 100);
+    return { Htrans, Hvent, H: (Htrans + Hvent) * bridge };
   }
 
-  // ---------- HEATING SYSTEM COST ----------
-  function systemParams(type, scop) {
-    // type: gas_old, gas_cond, hp
-    if (type === "gas_old") return { kind: "gas", eff: 0.75, label: "Régi gázkazán" };
-    if (type === "gas_cond") return { kind: "gas", eff: 0.92, label: "Kondenzációs gázkazán" };
-    return { kind: "el", scop: clamp(scop, 2.2, 5.0), label: "Hőszivattyú" };
+  function annualHeatDemandKWh(H_WperK, HDD) {
+    // Q(kWh/év) = H(W/K) * HDD(K·nap) * 24(h/nap) / 1000(W/kW)
+    return (H_WperK * HDD * 24) / 1000;
   }
 
-  function costFromQ(Q_kwh, heatingType, scop, priceGas, priceEl) {
-    const p = systemParams(heatingType, scop);
-    if (p.kind === "gas") {
-      // gáz: hőigény / hatásfok * gázár
-      return (Q_kwh / p.eff) * priceGas;
+  function costFromHeatDemand(QkWh, heatingType, priceGas, priceEl, scop) {
+    if (heatingType === "hp") {
+      const cop = clamp(scop, 2.2, 5.5);
+      const elKwh = QkWh / cop;
+      return elKwh * priceEl;
+    } else {
+      const eff = HEAT[heatingType].eff;
+      const gasKwh = QkWh / eff;
+      return gasKwh * priceGas;
     }
-    // villany: hőigény / SCOP * villanyár
-    return (Q_kwh / p.scop) * priceEl;
   }
 
-  // ---------- CORE MODEL ----------
-  function computeState(state) {
-    // state: {area, storeys, height, wallType, winRatio, nAir, wallInsCm, wallMat, roofInsCm, roofMat, floorInsCm, floorMat, heatingType, scop, hdd, priceGas, priceEl, bridge}
-    const areas = estimateAreas(state.area, state.storeys, state.height, state.winRatio);
+  function heatDemandFromCost(costFt, heatingType, priceGas, priceEl, scop) {
+    if (costFt <= 0) return 0;
+    if (heatingType === "hp") {
+      const cop = clamp(scop, 2.2, 5.5);
+      const elKwh = costFt / Math.max(priceEl, 1e-6);
+      return elKwh * cop;
+    } else {
+      const eff = HEAT[heatingType].eff;
+      const gasKwh = costFt / Math.max(priceGas, 1e-6);
+      return gasKwh * eff;
+    }
+  }
 
-    // U-k
-    const Uw = U_after_insulation(baseUWall[state.wallType] || baseUWall.brick, state.wallInsCm, state.wallMat);
-    const Ur = U_after_insulation(baseURoof, state.roofInsCm, state.roofMat);
-    const Uf = U_after_insulation(baseUFloor, state.floorInsCm, state.floorMat);
-    const Uwin = baseUWindow;
+  function computeScenario(params) {
+    const {
+      area, storeys, height,
+      wallType, winRatio, nAir, bridgePct,
+      wallInsCm, wallInsMat,
+      roofInsCm, roofInsMat,
+      floorInsCm, floorInsMat
+    } = params;
 
-    // H transzmisszió (W/K)
-    let H = 0;
-    H += Uw * areas.AwallNet;
-    H += Ur * areas.Aroof;
-    H += Uf * areas.Afloor;
-    H += Uwin * areas.Awin;
+    const g = geometry(area, storeys, height);
 
-    // Hőhíd korrekció
-    H = applyBridge(H, state.bridge);
+    const Awin = g.wallGross * clamp(winRatio, 5, 35) / 100;
+    const AwallNet = Math.max(0, g.wallGross - Awin);
 
-    // Szellőzés/infiltráció (W/K)
-    const n = clamp(state.nAir, 0.2, 1.2);
-    const Hvent = 0.33 * n * areas.V;
+    const Uwall = uWithInsulation(U_BASE[wallType], wallInsCm, LAMBDA[wallInsMat]);
+    const Uroof = uWithInsulation(U_BASE.roof, roofInsCm, LAMBDA[roofInsMat]);
+    const Ufloor = uWithInsulation(U_BASE.floor, floorInsCm, LAMBDA[floorInsMat]);
+    const Uwin = U_BASE.window;
 
-    // Összes hőveszteségi tényező
-    const Htot = H + Hvent;
-
-    // Éves hőigény (kWh/év)
-    const HDD = clamp(state.hdd, 1800, 4500);
-    const Q = Htot * HDD * 24 / 1000;
-
-    // Költség (Ft/év)
-    const cost = costFromQ(Q, state.heatingType, state.scop, state.priceGas, state.priceEl);
+    const loss = heatLossH(Uwall, AwallNet, Uwin, Awin, Uroof, g.roofArea, Ufloor, g.floorArea, nAir, g.volume, bridgePct);
 
     return {
-      areas, Uw, Ur, Uf, Uwin,
-      H_trans: H,
-      H_vent: Hvent,
-      H_total: Htot,
-      Q_kwh: Q,
-      costFt: cost
+      geom: g,
+      areas: { AwallNet, Awin, Aroof: g.roofArea, Afloor: g.floorArea },
+      U: { Uwall, Uwin, Uroof, Ufloor },
+      H: loss
     };
   }
 
-  // Kalibráció: a MOST megadott Ft/év alapján visszaszámoljuk a "MOST hőigény skálát"
-  // Azaz: ha a modell szerint MOST costModel = X, de a valós MOST = annualCostNow,
-  // akkor scale = annualCostNow / X.
-  // Ezt a skálát rászorzunk a kWh igényre és a cél költségre is (hogy a bázis “valós” legyen).
-  function calibrate(nowModelCost, annualCostNow) {
-    const eps = 1e-6;
-    if (!isFinite(nowModelCost) || nowModelCost < eps) return 1.0;
-    const a = Math.max(0, annualCostNow);
-    const s = a / nowModelCost;
-    return clamp(s, 0.3, 3.0); // ne szaladjon el (pl. extrém árazás miatt)
-  }
-
-  // “Csak X” összehasonlítás (fal / födém / padló / fűtés) – mindet a MOST állapothoz képest
-  function computeOnlyVariants(nowState, targetState) {
-    const variants = [];
-
-    // only wall
-    {
-      const s = { ...nowState, wallInsCm: targetState.wallInsCm, wallMat: targetState.wallMat };
-      variants.push({ key: "Fal", state: s });
-    }
-    // only roof
-    {
-      const s = { ...nowState, roofInsCm: targetState.roofInsCm, roofMat: targetState.roofMat };
-      variants.push({ key: "Födém/padlás", state: s });
-    }
-    // only floor
-    {
-      const s = { ...nowState, floorInsCm: targetState.floorInsCm, floorMat: targetState.floorMat };
-      variants.push({ key: "Padló/aljzat", state: s });
-    }
-    // only heating
-    {
-      const s = { ...nowState, heatingType: targetState.heatingType, scop: targetState.scop };
-      variants.push({ key: "Fűtés", state: s });
-    }
-
-    return variants;
-  }
-
-  // Beruházás becslés (nagyon durva):
-  // fajlagos Ft/m² @10cm × (delta_cm/10) × felület
-  function investmentEstimate(nowState, targetState, areas, unitCosts) {
-    const deltaWall = Math.max(0, targetState.wallInsCm - nowState.wallInsCm);
-    const deltaRoof = Math.max(0, targetState.roofInsCm - nowState.roofInsCm);
-    const deltaFloor = Math.max(0, targetState.floorInsCm - nowState.floorInsCm);
-
-    const wallInv = (unitCosts.wallM2 * (deltaWall / 10)) * areas.AwallNet;
-    const roofInv = (unitCosts.roofM2 * (deltaRoof / 10)) * areas.Aroof;
-    const floorInv = (unitCosts.floorM2 * (deltaFloor / 10)) * areas.Afloor;
-
-    const heatingInv = (nowState.heatingType !== targetState.heatingType) ? unitCosts.heating : 0;
-
-    return { wallInv, roofInv, floorInv, heatingInv };
-  }
-
-  function paybackYears(investmentFt, annualSavingFt) {
-    if (!isFinite(investmentFt) || investmentFt <= 0) return null;
-    if (!isFinite(annualSavingFt) || annualSavingFt <= 0) return null;
-    const y = investmentFt / annualSavingFt;
-    if (!isFinite(y) || y > 300) return 300;
-    return y;
-  }
-
-  // ---------- UI / RUN ----------
-  const resultBox = $("resultBox");
-  const btnCalcRun = $("btnCalcRun");
+  // ---------- UI / Defaults ----------
+  const btnRun = $("btnCalcRun");
   const btnReset = $("btnReset");
+  const resultBox = $("resultBox");
 
-  btnCalcRun.addEventListener("click", run);
-  btnReset.addEventListener("click", () => {
-    // alapok
-    $("area").value = 100;
-    $("storeys").value = "1";
-    $("height").value = 2.6;
-    $("wallType").value = "brick";
-    $("winRatio").value = 18;
-    $("nAir").value = 0.6;
+  const DEFAULTS = {
+    area: 100,
+    storeys: 1,
+    height: 2.6,
+    wallType: "brick",
+    winRatio: 18,
+    nAir: 0.6,
+    wallInsNow: 0,
+    wallInsMat: "eps",
+    roofInsNow: 0,
+    roofInsMat: "rockwool",
+    floorInsNow: 0,
+    floorInsMat: "xps",
+    heatingNow: "gas_old",
+    scopNow: 3.2,
+    annualCostNow: 600000,
 
-    $("wallInsNow").value = 0;
-    $("wallInsMat").value = "eps";
-    $("roofInsNow").value = 0;
-    $("roofInsMat").value = "rockwool";
-    $("floorInsNow").value = 0;
-    $("floorInsMat").value = "xps";
+    wallInsTarget: 15,
+    roofInsTarget: 25,
+    floorInsTarget: 10,
+    heatingTarget: "hp",
+    scopTarget: 3.6,
+    hdd: 3000,
+    priceGas: 40,
+    priceEl: 70,
 
-    $("heatingNow").value = "gas_old";
-    $("scopNow").value = 3.2;
-    $("annualCostNow").value = 600000;
+    bridge: 10,
+    costWallM2: 18000,
+    costRoofM2: 12000,
+    costFloorM2: 15000,
+    costHeating: 3500000
+  };
 
-    $("wallInsTarget").value = 15;
-    $("roofInsTarget").value = 25;
-    $("floorInsTarget").value = 10;
-    $("heatingTarget").value = "hp";
-    $("scopTarget").value = 3.6;
+  function setDefaults() {
+    $("area").value = DEFAULTS.area;
+    $("storeys").value = String(DEFAULTS.storeys);
+    $("height").value = DEFAULTS.height;
+    $("wallType").value = DEFAULTS.wallType;
+    $("winRatio").value = DEFAULTS.winRatio;
+    $("nAir").value = DEFAULTS.nAir;
+    $("wallInsNow").value = DEFAULTS.wallInsNow;
+    $("wallInsMat").value = DEFAULTS.wallInsMat;
+    $("roofInsNow").value = DEFAULTS.roofInsNow;
+    $("roofInsMat").value = DEFAULTS.roofInsMat;
+    $("floorInsNow").value = DEFAULTS.floorInsNow;
+    $("floorInsMat").value = DEFAULTS.floorInsMat;
+    $("heatingNow").value = DEFAULTS.heatingNow;
+    $("scopNow").value = DEFAULTS.scopNow;
+    $("annualCostNow").value = DEFAULTS.annualCostNow;
 
-    $("hdd").value = 3000;
-    $("priceGas").value = 40;
-    $("priceEl").value = 70;
+    $("wallInsTarget").value = DEFAULTS.wallInsTarget;
+    $("roofInsTarget").value = DEFAULTS.roofInsTarget;
+    $("floorInsTarget").value = DEFAULTS.floorInsTarget;
+    $("heatingTarget").value = DEFAULTS.heatingTarget;
+    $("scopTarget").value = DEFAULTS.scopTarget;
+    $("hdd").value = DEFAULTS.hdd;
+    $("priceGas").value = DEFAULTS.priceGas;
+    $("priceEl").value = DEFAULTS.priceEl;
 
-    $("bridge").value = 10;
-    $("costWallM2").value = 18000;
-    $("costRoofM2").value = 12000;
-    $("costFloorM2").value = 15000;
-    $("costHeating").value = 3500000;
-
-    run();
-  });
-
-  function gatherStates() {
-    const common = {
-      area: readNum("area"),
-      storeys: parseInt(readStr("storeys"), 10) || 1,
-      height: readNum("height"),
-      wallType: readStr("wallType"),
-      winRatio: readNum("winRatio"),
-      nAir: readNum("nAir"),
-      hdd: readNum("hdd"),
-      priceGas: readNum("priceGas"),
-      priceEl: readNum("priceEl"),
-      bridge: readNum("bridge"),
-
-      // anyagok (célban is ezekkel számolunk, mert a user külön választ most is)
-      wallMat: readStr("wallInsMat"),
-      roofMat: readStr("roofInsMat"),
-      floorMat: readStr("floorInsMat"),
-    };
-
-    const now = {
-      ...common,
-      wallInsCm: readNum("wallInsNow"),
-      roofInsCm: readNum("roofInsNow"),
-      floorInsCm: readNum("floorInsNow"),
-      heatingType: readStr("heatingNow"),
-      scop: readNum("scopNow")
-    };
-
-    const target = {
-      ...common,
-      wallInsCm: readNum("wallInsTarget"),
-      roofInsCm: readNum("roofInsTarget"),
-      floorInsCm: readNum("floorInsTarget"),
-      heatingType: readStr("heatingTarget"),
-      scop: readNum("scopTarget")
-    };
-
-    const annualCostNow = readNum("annualCostNow");
-
-    const unitCosts = {
-      wallM2: readNum("costWallM2"),
-      roofM2: readNum("costRoofM2"),
-      floorM2: readNum("costFloorM2"),
-      heating: readNum("costHeating")
-    };
-
-    // sanity clamps
-    now.wallInsCm = clamp(now.wallInsCm, 0, 30);
-    now.roofInsCm = clamp(now.roofInsCm, 0, 60);
-    now.floorInsCm = clamp(now.floorInsCm, 0, 20);
-
-    target.wallInsCm = clamp(target.wallInsCm, 0, 30);
-    target.roofInsCm = clamp(target.roofInsCm, 0, 60);
-    target.floorInsCm = clamp(target.floorInsCm, 0, 20);
-
-    return { now, target, annualCostNow, unitCosts };
+    $("bridge").value = DEFAULTS.bridge;
+    $("costWallM2").value = DEFAULTS.costWallM2;
+    $("costRoofM2").value = DEFAULTS.costRoofM2;
+    $("costFloorM2").value = DEFAULTS.costFloorM2;
+    $("costHeating").value = DEFAULTS.costHeating;
   }
 
-  function run() {
-    const { now, target, annualCostNow, unitCosts } = gatherStates();
+  // ---------- Core calc ----------
+  function readInputs() {
+    const area = clamp(num($("area").value, 100), 20, 1000);
+    const storeys = clamp(num($("storeys").value, 1), 1, 3);
+    const height = clamp(num($("height").value, 2.6), 2.2, 3.2);
+    const wallType = $("wallType").value;
 
-    // Modell-számítás (nyers)
-    const nowRaw = computeState(now);
-    const targetRaw = computeState(target);
+    const winRatio = clamp(num($("winRatio").value, 18), 5, 35);
+    const nAir = clamp(num($("nAir").value, 0.6), 0.2, 1.2);
 
-    // Kalibráció a "MOST költséghez"
-    const scale = calibrate(nowRaw.costFt, annualCostNow);
+    const wallInsNow = clamp(num($("wallInsNow").value, 0), 0, 30);
+    const wallInsMat = $("wallInsMat").value;
+    const roofInsNow = clamp(num($("roofInsNow").value, 0), 0, 60);
+    const roofInsMat = $("roofInsMat").value;
+    const floorInsNow = clamp(num($("floorInsNow").value, 0), 0, 20);
+    const floorInsMat = $("floorInsMat").value;
 
-    const nowCost = annualCostNow; // ezt tekintjük igaznak
-    const nowQ = nowRaw.Q_kwh * scale;
+    const heatingNow = $("heatingNow").value;
+    const scopNow = clamp(num($("scopNow").value, 3.2), 2.2, 5.5);
 
-    const targetCost = targetRaw.costFt * scale;
-    const targetQ = targetRaw.Q_kwh * scale;
+    const annualCostNow = Math.max(0, num($("annualCostNow").value, 0));
 
-    const saving = Math.max(0, nowCost - targetCost);
-    const savingMo = saving / 12;
+    const wallInsTarget = clamp(num($("wallInsTarget").value, 15), 0, 30);
+    const roofInsTarget = clamp(num($("roofInsTarget").value, 25), 0, 60);
+    const floorInsTarget = clamp(num($("floorInsTarget").value, 10), 0, 20);
 
-    // Javulás (hőigény arány)
-    const improvePct = (nowQ > 0) ? (1 - (targetQ / nowQ)) * 100 : 0;
+    const heatingTarget = $("heatingTarget").value;
+    const scopTarget = clamp(num($("scopTarget").value, 3.6), 2.2, 5.5);
 
-    // “Csak X” összehasonlítás (kalibrált)
-    const variants = computeOnlyVariants(now, target);
-    const variantRows = variants.map(v => {
-      const raw = computeState(v.state);
-      const c = raw.costFt * scale;
-      const s = Math.max(0, nowCost - c);
-      return { name: v.key, cost: c, saving: s };
+    const hdd = clamp(num($("hdd").value, 3000), 1800, 4500);
+    const priceGas = clamp(num($("priceGas").value, 40), 10, 120);
+    const priceEl = clamp(num($("priceEl").value, 70), 20, 180);
+
+    const bridge = clamp(num($("bridge").value, 10), 0, 25);
+
+    const costWallM2 = Math.max(0, num($("costWallM2").value, 18000));
+    const costRoofM2 = Math.max(0, num($("costRoofM2").value, 12000));
+    const costFloorM2 = Math.max(0, num($("costFloorM2").value, 15000));
+    const costHeating = Math.max(0, num($("costHeating").value, 3500000));
+
+    return {
+      area, storeys, height, wallType,
+      winRatio, nAir,
+      wallInsNow, wallInsMat,
+      roofInsNow, roofInsMat,
+      floorInsNow, floorInsMat,
+      heatingNow, scopNow,
+      annualCostNow,
+      wallInsTarget, roofInsTarget, floorInsTarget,
+      heatingTarget, scopTarget,
+      hdd, priceGas, priceEl,
+      bridge,
+      costWallM2, costRoofM2, costFloorM2, costHeating
+    };
+  }
+
+  function investmentCosts(sNow, sTarget, areas, costs) {
+    // Fajlagos ár @10cm -> arányosítjuk a DELTA vastagsággal
+    const deltaWall = Math.max(0, sTarget.wall - sNow.wall);
+    const deltaRoof = Math.max(0, sTarget.roof - sNow.roof);
+    const deltaFloor = Math.max(0, sTarget.floor - sNow.floor);
+
+    const wallCost = areas.AwallNet * costs.costWallM2 * (deltaWall / 10);
+    const roofCost = areas.Aroof * costs.costRoofM2 * (deltaRoof / 10);
+    const floorCost = areas.Afloor * costs.costFloorM2 * (deltaFloor / 10);
+
+    const heatCost = costs.costHeating; // egyszeri
+
+    return {
+      wallCost,
+      roofCost,
+      floorCost,
+      heatCost
+    };
+  }
+
+  function renderResult(out) {
+    resultBox.innerHTML = out;
+  }
+
+  function calcAll() {
+    const x = readInputs();
+
+    // Szenárió (MOST)
+    const nowScenario = computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
     });
 
+    // Szenárió (CÉL) – anyagokat a MOST anyagból vesszük (egyszerűsítés)
+    const targetScenario = computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+    });
+
+    // Modell Q (MOST) – csak fizika alapján
+    const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
+
+    // "Valós" Q (MOST) a megadott Ft/év alapján (árakból + hatásfokból)
+    const Q_real_now = heatDemandFromCost(
+      x.annualCostNow,
+      x.heatingNow,
+      x.priceGas,
+      x.priceEl,
+      x.scopNow
+    );
+
+    // Kalibrációs szorzó (ha a fizikai modell túl nagy/kicsi)
+    const calib = (Q_model_now > 0) ? (Q_real_now / Q_model_now) : 1;
+
+    // CÉL hőigény a fizikai modellből, kalibrálva
+    const Q_model_target = annualHeatDemandKWh(targetScenario.H.H, x.hdd);
+    const Q_real_target = Q_model_target * calib;
+
+    // Költségek
+    const costNow = x.annualCostNow; // bázis
+    const costTarget = costFromHeatDemand(Q_real_target, x.heatingTarget, x.priceGas, x.priceEl, x.scopTarget);
+
+    const savingYear = Math.max(0, costNow - costTarget);
+    const savingMonth = savingYear / 12;
+
+    const improve = (Q_real_now > 0) ? (1 - (Q_real_target / Q_real_now)) : 0;
+
+    // “Csak X” összehasonlítás: csak egy elem változik a MOST-hoz képest
+    function costOnly(change) {
+      const wall = change.wall ?? x.wallInsNow;
+      const roof = change.roof ?? x.roofInsNow;
+      const floor = change.floor ?? x.floorInsNow;
+
+      const sc = computeScenario({
+        area: x.area, storeys: x.storeys, height: x.height,
+        wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+        wallInsCm: wall, wallInsMat: x.wallInsMat,
+        roofInsCm: roof, roofInsMat: x.roofInsMat,
+        floorInsCm: floor, floorInsMat: x.floorInsMat
+      });
+
+      const Q_model = annualHeatDemandKWh(sc.H.H, x.hdd);
+      const Q_real = Q_model * calib;
+
+      const heating = change.heating ?? x.heatingNow;
+      const scop = change.scop ?? x.scopNow;
+
+      return costFromHeatDemand(Q_real, heating, x.priceGas, x.priceEl, scop);
+    }
+
+    const costOnlyRoof = costOnly({ roof: x.roofInsTarget });
+    const costOnlyWall = costOnly({ wall: x.wallInsTarget });
+    const costOnlyFloor = costOnly({ floor: x.floorInsTarget });
+    const costOnlyHeat = costOnly({ heating: x.heatingTarget, scop: x.scopTarget });
+
+    const saveOnlyRoof = Math.max(0, costNow - costOnlyRoof);
+    const saveOnlyWall = Math.max(0, costNow - costOnlyWall);
+    const saveOnlyFloor = Math.max(0, costNow - costOnlyFloor);
+    const saveOnlyHeat = Math.max(0, costNow - costOnlyHeat);
+
     // Prioritás Ft/év szerint
-    const sorted = [...variantRows].sort((a, b) => b.saving - a.saving);
+    const prio = [
+      { k: "Födém/padlás", v: saveOnlyRoof },
+      { k: "Fal", v: saveOnlyWall },
+      { k: "Padló/aljzat", v: saveOnlyFloor },
+      { k: "Fűtés", v: saveOnlyHeat }
+    ].sort((a, b) => b.v - a.v);
 
-    // Beruházás + megtérülés elemként
-    const inv = investmentEstimate(now, target, nowRaw.areas, unitCosts);
+    // Beruházás + megtérülés
+    const inv = investmentCosts(
+      { wall: x.wallInsNow, roof: x.roofInsNow, floor: x.floorInsNow },
+      { wall: x.wallInsTarget, roof: x.roofInsTarget, floor: x.floorInsTarget },
+      targetScenario.areas,
+      { costWallM2: x.costWallM2, costRoofM2: x.costRoofM2, costFloorM2: x.costFloorM2, costHeating: x.costHeating }
+    );
 
-    const payWall = paybackYears(inv.wallInv, variantRows.find(x=>x.name==="Fal")?.saving || 0);
-    const payRoof = paybackYears(inv.roofInv, variantRows.find(x=>x.name==="Födém/padlás")?.saving || 0);
-    const payFloor = paybackYears(inv.floorInv, variantRows.find(x=>x.name==="Padló/aljzat")?.saving || 0);
-    const payHeat = paybackYears(inv.heatingInv, variantRows.find(x=>x.name==="Fűtés")?.saving || 0);
+    const pbRoof = paybackYears(inv.roofCost, saveOnlyRoof);
+    const pbWall = paybackYears(inv.wallCost, saveOnlyWall);
+    const pbFloor = paybackYears(inv.floorCost, saveOnlyFloor);
 
-    // Szöveges magyarázat: mi történt
-    const heatNowLabel = systemParams(now.heatingType, now.scop).label;
-    const heatTarLabel = systemParams(target.heatingType, target.scop).label;
+    // fűtés korszerűsítés megtérülése csak akkor számolható, ha tényleg csere van
+    const pbHeat = (x.heatingTarget !== x.heatingNow) ? paybackYears(inv.heatCost, saveOnlyHeat) : Infinity;
 
-    // KPI blokkok
-    const kpiHtml = `
-      <div class="kpi">
-        <div class="box">
-          <span>MOST (Ft/év)</span>
-          <b>${fmtFt(nowCost)}</b>
-          <span class="mono">${fmtFtMo(nowCost/12)}</span>
-        </div>
-        <div class="box">
-          <span>CÉL (Ft/év)</span>
-          <b>${fmtFt(targetCost)}</b>
-          <span class="mono">${fmtFtMo(targetCost/12)}</span>
-        </div>
-        <div class="box">
-          <span>Különbség (Ft/év)</span>
-          <b>${fmtFt(saving)}</b>
-          <span class="mono">${fmtFtMo(savingMo)}</span>
-        </div>
-        <div class="box">
-          <span>Javulás (hőigény)</span>
-          <b>${isFinite(improvePct) ? (improvePct.toFixed(1) + "%") : "—"}</b>
-          <span class="mono">${fmtKwh(nowQ)} → ${fmtKwh(targetQ)}</span>
-        </div>
-      </div>
-    `;
+    // Tech számok
+    const techNow = {
+      Q_model: Q_model_now,
+      Q_real: Q_real_now,
+      H: nowScenario.H.H,
+      U: nowScenario.U
+    };
+    const techTarget = {
+      Q_model: Q_model_target,
+      Q_real: Q_real_target,
+      H: targetScenario.H.H,
+      U: targetScenario.U
+    };
 
-    const assumptionsHtml = `
-      <div class="sectionTitle">Mi alapján számol?</div>
-      <ul>
-        <li><b>Felület-becslés:</b> négyzet alaprajz (alapterületből), fal felület = kerület × belmagasság × szintek</li>
-        <li><b>Transzmisszió:</b> H = Σ(U·A) (fal, ablak, födém, padló)</li>
-        <li><b>Szellőzés:</b> H<sub>vent</sub> = 0,33 · n · V</li>
-        <li><b>Éves hőigény:</b> Q = (H+Hvent) · HDD · 24 / 1000</li>
-        <li><b>Kalibráció:</b> a te megadott <b>MOST Ft/év</b> értékedhez igazítjuk a modellt (hogy a bázis “valós” legyen)</li>
-      </ul>
-      <div class="help">
-        <b>Megjegyzés:</b> Ha a ház formája nem négyzet, vagy nagyon sok/kevés az ablak, a valós felületek eltérhetnek.
-        Később be tudunk tenni “alaprajz arányt” (pl. 1:1, 1:1.5, 1:2) vagy kézi kerületet is.
-      </div>
-    `;
-
-    const stateHtml = `
-      <div class="hr"></div>
-      <div class="sectionTitle">Jelenlegi → Cél (összefoglaló)</div>
-      <ul>
-        <li><b>Fal:</b> ${now.wallInsCm} cm → ${target.wallInsCm} cm (${readStr("wallInsMat").toUpperCase()})</li>
-        <li><b>Födém/padlás:</b> ${now.roofInsCm} cm → ${target.roofInsCm} cm (${readStr("roofInsMat").toUpperCase()})</li>
-        <li><b>Padló/aljzat:</b> ${now.floorInsCm} cm → ${target.floorInsCm} cm (${readStr("floorInsMat").toUpperCase()})</li>
-        <li><b>Fűtés:</b> ${heatNowLabel} → ${heatTarLabel}</li>
-        <li><b>HDD:</b> ${Math.round(now.hdd)} • <b>Légcsere:</b> ${now.nAir.toFixed(2)} 1/h • <b>Ablakarány:</b> ${now.winRatio}%</li>
-      </ul>
-    `;
-
-    const priorityHtml = `
-      <div class="hr"></div>
-      <div class="sectionTitle">“Csak X” összehasonlítás (Ft/év megtakarítás a MOST-hoz képest)</div>
-      <ul>
-        ${sorted.map(x => `<li><b>${x.name}:</b> ${fmtFtYr(x.saving)}</li>`).join("")}
-      </ul>
-      <div class="help">Ez segít dönteni: melyik lépés adja a legtöbb Ft/év hatást önmagában.</div>
-    `;
-
-    const investHtml = `
-      <div class="hr"></div>
-      <div class="sectionTitle">Beruházás + megtérülés (irány, állítható)</div>
-      <ul>
-        <li><b>Födém:</b> ${fmtFt(inv.roofInv)} → megtérülés: ${payRoof ? (payRoof.toFixed(1) + " év") : "—"}</li>
-        <li><b>Fal:</b> ${fmtFt(inv.wallInv)} → megtérülés: ${payWall ? (payWall.toFixed(1) + " év") : "—"}</li>
-        <li><b>Padló:</b> ${fmtFt(inv.floorInv)} → megtérülés: ${payFloor ? (payFloor.toFixed(1) + " év") : "—"}</li>
-        <li><b>Fűtés:</b> ${fmtFt(inv.heatingInv)} → megtérülés: ${payHeat ? (payHeat.toFixed(1) + " év") : "—"}</li>
-      </ul>
-      <div class="help">
-        A megtérülés attól függ, milyen áron csináljátok meg. A “Haladó” résznél a fajlagos Ft/m² és a fűtés ára állítható.
-      </div>
-    `;
-
-    const techHtml = `
-      <div class="hr"></div>
-      <div class="sectionTitle">Technikai számok (ellenőrzéshez)</div>
-      <div class="mono muted">
-        Felületek (becslés): fal nettó ${nowRaw.areas.AwallNet.toFixed(0)} m² • ablak ${nowRaw.areas.Awin.toFixed(0)} m² • födém ${nowRaw.areas.Aroof.toFixed(0)} m² • padló ${nowRaw.areas.Afloor.toFixed(0)} m² • térfogat ${nowRaw.areas.V.toFixed(0)} m³<br/>
-        U-értékek MOST: fal ${nowRaw.Uw.toFixed(2)} • födém ${nowRaw.Ur.toFixed(2)} • padló ${nowRaw.Uf.toFixed(2)} • ablak ${nowRaw.Uwin.toFixed(2)} (W/m²K)<br/>
-        U-értékek CÉL: fal ${targetRaw.Uw.toFixed(2)} • födém ${targetRaw.Ur.toFixed(2)} • padló ${targetRaw.Uf.toFixed(2)} • ablak ${targetRaw.Uwin.toFixed(2)} (W/m²K)<br/>
-        H (W/K) MOST: transz ${nowRaw.H_trans.toFixed(0)} + vent ${nowRaw.H_vent.toFixed(0)} = ${nowRaw.H_total.toFixed(0)}<br/>
-        H (W/K) CÉL: transz ${targetRaw.H_trans.toFixed(0)} + vent ${targetRaw.H_vent.toFixed(0)} = ${targetRaw.H_total.toFixed(0)}<br/>
-        Kalibrációs szorzó: ${scale.toFixed(2)} (MOST Ft/év alapján)
-      </div>
-    `;
-
-    resultBox.innerHTML = `
+    const html = `
       <div class="sectionTitle">Eredmény</div>
-      ${kpiHtml}
-      ${stateHtml}
-      ${priorityHtml}
-      ${investHtml}
-      ${assumptionsHtml}
-      ${techHtml}
+
+      <div class="out" style="margin-top:10px;">
+        <div class="sectionTitle">MOST → CÉL</div>
+        <ul>
+          <li><b>Fal:</b> ${x.wallInsNow} cm → ${x.wallInsTarget} cm (${x.wallInsMat.toUpperCase()})</li>
+          <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
+          <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
+          <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}</li>
+          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
+        </ul>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">Költség (becslés)</div>
+        <div style="margin-top:6px;">
+          <b>MOST (Ft/év):</b> ${fmtFt(costNow)} <span class="muted">~ ${fmtFtShort(costNow/12)} Ft/hó</span><br/>
+          <b>CÉL (Ft/év):</b> ${fmtFt(costTarget)} <span class="muted">~ ${fmtFtShort(costTarget/12)} Ft/hó</span><br/>
+          <div class="hr"></div>
+          <b>Különbség:</b> ${fmtFt(savingYear)} <span class="muted">~ ${fmtFtShort(savingMonth)} Ft/hó</span><br/>
+          <b>Javulás (hőigény):</b> ${fmtPct(improve*100)}<br/>
+          <span class="muted">Magyarázat: a “MOST” Ft/év értékből visszaszámoljuk a MOST hőigényt, majd ugyanazzal a kalibrációval számoljuk a CÉL hőigényt.</span>
+        </div>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">“Csak X” összehasonlítás (Ft/év megtakarítás a MOST-hoz képest)</div>
+        <ul>
+          <li><b>Csak fűtés:</b> ~ ${fmtFt(saveOnlyHeat)}</li>
+          <li><b>Csak födém/padlás:</b> ~ ${fmtFt(saveOnlyRoof)}</li>
+          <li><b>Csak fal:</b> ~ ${fmtFt(saveOnlyWall)}</li>
+          <li><b>Csak padló/aljzat:</b> ~ ${fmtFt(saveOnlyFloor)}</li>
+        </ul>
+        <div class="muted">Ez segít dönteni: melyik lépés adja a legtöbb Ft/év hatást önmagában.</div>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">Prioritás (Ft/év alapján)</div>
+        <ol>
+          <li><b>${prio[0].k}:</b> ~ ${fmtFt(prio[0].v)} / év</li>
+          <li><b>${prio[1].k}:</b> ~ ${fmtFt(prio[1].v)} / év</li>
+          <li><b>${prio[2].k}:</b> ~ ${fmtFt(prio[2].v)} / év</li>
+          <li><b>${prio[3].k}:</b> ~ ${fmtFt(prio[3].v)} / év</li>
+        </ol>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">Beruházás + megtérülés (irány, állítható)</div>
+        <ul>
+          <li><b>Födém:</b> ${fmtFt(inv.roofCost)} → megtérülés: <b>${fmtYears(pbRoof)}</b></li>
+          <li><b>Fal:</b> ${fmtFt(inv.wallCost)} → megtérülés: <b>${fmtYears(pbWall)}</b></li>
+          <li><b>Padló:</b> ${fmtFt(inv.floorCost)} → megtérülés: <b>${fmtYears(pbFloor)}</b></li>
+          <li><b>Fűtés:</b> ${fmtFt(inv.heatCost)} → megtérülés: <b>${fmtYears(pbHeat)}</b> <span class="muted">(csak ha csere van)</span></li>
+        </ul>
+        <div class="muted">A fajlagos árak a “Haladó” részben állíthatók. A megtérülés a MOST→CÉL különbségen és a te áraiddal számol.</div>
+      </div>
+
+      <details>
+        <summary>Technikai számok (ellenőrzéshez)</summary>
+
+        <div class="out" style="margin-top:10px;">
+          <div class="sectionTitle">Felületek (becslés)</div>
+          <div class="muted">
+            Fal nettó: ${Math.round(targetScenario.areas.AwallNet)} m² • ablak: ${Math.round(targetScenario.areas.Awin)} m² • födém: ${Math.round(targetScenario.areas.Aroof)} m² • padló: ${Math.round(targetScenario.areas.Afloor)} m² • térfogat: ${Math.round(targetScenario.geom.volume)} m³
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="sectionTitle">U-értékek (W/m²K)</div>
+          <div class="muted">
+            MOST: fal ${techNow.U.Uwall.toFixed(2)} • födém ${techNow.U.Uroof.toFixed(2)} • padló ${techNow.U.Ufloor.toFixed(2)} • ablak ${techNow.U.Uwin.toFixed(2)}<br/>
+            CÉL: fal ${techTarget.U.Uwall.toFixed(2)} • födém ${techTarget.U.Uroof.toFixed(2)} • padló ${techTarget.U.Ufloor.toFixed(2)} • ablak ${techTarget.U.Uwin.toFixed(2)}
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="sectionTitle">H és hőigény</div>
+          <div class="muted">
+            H (MOST): ${(techNow.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techNow.Q_model)}<br/>
+            H (CÉL): ${(techTarget.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techTarget.Q_model)}<br/>
+            Kalibrációs szorzó: ${calib.toFixed(2)}<br/>
+            Q_real(MOST): ${fmtKwh(techNow.Q_real)} • Q_real(CÉL): ${fmtKwh(techTarget.Q_real)}
+          </div>
+        </div>
+      </details>
     `;
+
+    renderResult(html);
   }
 
-  // induláskor számol
-  run();
+  // events
+  btnRun.addEventListener("click", calcAll);
+  btnReset.addEventListener("click", () => {
+    setDefaults();
+    renderResult(`
+      <div class="sectionTitle">Eredmény</div>
+      <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+    `);
+  });
+
+  // init
+  setDefaults();
 })();
