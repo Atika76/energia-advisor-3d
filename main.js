@@ -137,6 +137,14 @@ const wallPayback = estimatedAnnualSaving > 0
           <li>${heatText}</li>
         </ul>
       </div>
+      <div style="padding:10px; border:1px solid rgba(255,255,255,.15); border-radius:12px;">
+  <b>Megtérülési becslés (nagyon durva irányérték):</b>
+  <ul style="margin:8px 0 0 18px;">
+    <li>Éves becsült megtakarítás: ~${estimatedAnnualSaving.toLocaleString()} Ft</li>
+    <li>Födém szigetelés megtérülés: ~${roofPayback} év</li>
+    <li>Fal szigetelés megtérülés: ~${wallPayback} év</li>
+  </ul>
+</div>
 
       <div style="color: rgba(255,255,255,.7); font-size:12px;">
         Megjegyzés: ez <b>döntéstámogatás</b>. Pontos számításhoz helyszíni felmérés / energetikus szükséges.
