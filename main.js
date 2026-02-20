@@ -1,14 +1,15 @@
 /* Energia Advisor 3D – Valós (C) kalkulátor
    - UA + infiltráció + HDD
    - Kalibrálás: a MOST Ft/év értéket bázisnak vesszük (hogy a modell "valós" legyen)
-   - Tudástár (kereső + kategóriák + cikk nézet)
-   - 3D nézet (MVP) = Profi hőtérkép MOST/CÉL/KÜLÖNBSÉG
+   - PRO hőtérkép (3D nézet): MOST / CÉL / KÜLÖNBSÉG + top1/top2 kiemelés + tooltip + gyors összefoglaló
 */
 
 (function () {
+  "use strict";
+
   const $ = (id) => document.getElementById(id);
 
-  // NAV
+  // ---------- NAV ----------
   const btnHome = $("btnHome");
   const btnCalc = $("btnCalc");
   const btn3d = $("btn3d");
@@ -23,32 +24,38 @@
   const homeGoDocs = $("homeGoDocs");
 
   function setActive(btn) {
-    [btnHome, btnCalc, btn3d, btnDocs].forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
+    [btnHome, btnCalc, btn3d, btnDocs].forEach((b) => b && b.classList.remove("active"));
+    btn && btn.classList.add("active");
   }
 
   function showView(which) {
-    viewHome.style.display = which === "home" ? "" : "none";
-    viewCalc.style.display = which === "calc" ? "" : "none";
-    view3d.style.display = which === "3d" ? "" : "none";
-    viewDocs.style.display = which === "docs" ? "" : "none";
+    if (viewHome) viewHome.style.display = which === "home" ? "" : "none";
+    if (viewCalc) viewCalc.style.display = which === "calc" ? "" : "none";
+    if (view3d) view3d.style.display = which === "3d" ? "" : "none";
+    if (viewDocs) viewDocs.style.display = which === "docs" ? "" : "none";
 
     if (which === "home") setActive(btnHome);
     if (which === "calc") setActive(btnCalc);
     if (which === "3d") setActive(btn3d);
     if (which === "docs") setActive(btnDocs);
 
-    // frissítések
-    if (which === "docs") renderDocs();
-    if (which === "3d") updateHeatmap();
+    // PRO: ha 3D-re mész, frissítjük a hőtérképet a jelenlegi inputokból
+    if (which === "3d") {
+      try {
+        heatmapRenderFromInputs();
+      } catch (e) {
+        // ne boruljon a UI
+        // console.warn(e);
+      }
+    }
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
-  btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
-  btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
-  btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
+  if (btnHome) btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
+  if (btnCalc) btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  if (btn3d) btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
+  if (btnDocs) btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
@@ -61,6 +68,7 @@
     return showView("home");
   }
   window.addEventListener("hashchange", initByHash);
+  initByHash();
 
   // ---------- Helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -108,7 +116,7 @@
     concrete: 1.60,  // panel/beton
     roof: 1.60,      // födém/padlás szig nélkül
     floor: 1.10,     // aljzat/padló szig nélkül
-    window: 2.60     // átlag régi/gyenge ablak
+    window: 2.60     // régi/átlag ablak
   };
 
   // fűtés hatásfok / COP
@@ -128,37 +136,16 @@
 
   function geometry(areaTotal, storeys, height) {
     const s = clamp(storeys, 1, 3);
-    const footprint = areaTotal / s;
+    const footprint = areaTotal / s; // m²
     const side = Math.sqrt(Math.max(footprint, 1));
     const perim = 4 * side;
 
-    const wallGross = perim * height * s;
-    const roofArea = footprint;
-    const floorArea = footprint;
-    const volume = footprint * height * s;
+    const wallGross = perim * height * s;          // m²
+    const roofArea = footprint;                    // m²
+    const floorArea = footprint;                   // m²
+    const volume = footprint * height * s;         // m³
 
     return { footprint, side, perim, wallGross, roofArea, floorArea, volume };
-  }
-
-  function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct) {
-    const H_wall = (Uwall * Awall);
-    const H_win  = (Uwin * Awin);
-    const H_roof = (Uroof * Aroof);
-    const H_floor= (Ufloor * Afloor);
-    const Htrans = H_wall + H_win + H_roof + H_floor;
-    const Hvent  = 0.33 * nAir * volume; // W/K
-    const bridge = 1 + (bridgePct / 100);
-
-    const parts = {
-      wall: H_wall * bridge,
-      window: H_win * bridge,
-      roof: H_roof * bridge,
-      floor: H_floor * bridge,
-      vent: Hvent * bridge
-    };
-    const H = (Htrans + Hvent) * bridge;
-
-    return { H, Htrans: Htrans * bridge, Hvent: Hvent * bridge, parts, bridge };
   }
 
   function annualHeatDemandKWh(H_WperK, HDD) {
@@ -200,6 +187,7 @@
     } = params;
 
     const g = geometry(area, storeys, height);
+
     const Awin = g.wallGross * clamp(winRatio, 5, 35) / 100;
     const AwallNet = Math.max(0, g.wallGross - Awin);
 
@@ -208,20 +196,40 @@
     const Ufloor = uWithInsulation(U_BASE.floor, floorInsCm, LAMBDA[floorInsMat]);
     const Uwin = U_BASE.window;
 
-    const loss = heatLossBreakdown(
-      Uwall, AwallNet,
-      Uwin, Awin,
-      Uroof, g.roofArea,
-      Ufloor, g.floorArea,
-      nAir, g.volume,
-      bridgePct
-    );
+    // komponens bontás (hőhíd korrekciót a végén szorzóként tesszük rá)
+    const H_wall = Uwall * AwallNet;
+    const H_win = Uwin * Awin;
+    const H_roof = Uroof * g.roofArea;
+    const H_floor = Ufloor * g.floorArea;
+    const H_vent = 0.33 * nAir * g.volume;
+
+    const bridge = 1 + (bridgePct / 100);
+
+    const base = {
+      wall: H_wall,
+      win: H_win,
+      roof: H_roof,
+      floor: H_floor,
+      vent: H_vent
+    };
+
+    const withBridge = {
+      wall: base.wall * bridge,
+      win: base.win * bridge,
+      roof: base.roof * bridge,
+      floor: base.floor * bridge,
+      vent: base.vent * bridge
+    };
+
+    const Htrans = withBridge.wall + withBridge.win + withBridge.roof + withBridge.floor;
+    const Hvent = withBridge.vent;
+    const H = Htrans + Hvent;
 
     return {
       geom: g,
       areas: { AwallNet, Awin, Aroof: g.roofArea, Afloor: g.floorArea },
       U: { Uwall, Uwin, Uroof, Ufloor },
-      H: loss
+      H: { Htrans, Hvent, H, breakdown: withBridge }
     };
   }
 
@@ -264,79 +272,77 @@
   };
 
   function setDefaults() {
-    $("area").value = DEFAULTS.area;
-    $("storeys").value = String(DEFAULTS.storeys);
-    $("height").value = DEFAULTS.height;
-    $("wallType").value = DEFAULTS.wallType;
-    $("winRatio").value = DEFAULTS.winRatio;
-    $("nAir").value = DEFAULTS.nAir;
+    if ($("area")) $("area").value = DEFAULTS.area;
+    if ($("storeys")) $("storeys").value = String(DEFAULTS.storeys);
+    if ($("height")) $("height").value = DEFAULTS.height;
+    if ($("wallType")) $("wallType").value = DEFAULTS.wallType;
+    if ($("winRatio")) $("winRatio").value = DEFAULTS.winRatio;
+    if ($("nAir")) $("nAir").value = DEFAULTS.nAir;
+    if ($("wallInsNow")) $("wallInsNow").value = DEFAULTS.wallInsNow;
+    if ($("wallInsMat")) $("wallInsMat").value = DEFAULTS.wallInsMat;
+    if ($("roofInsNow")) $("roofInsNow").value = DEFAULTS.roofInsNow;
+    if ($("roofInsMat")) $("roofInsMat").value = DEFAULTS.roofInsMat;
+    if ($("floorInsNow")) $("floorInsNow").value = DEFAULTS.floorInsNow;
+    if ($("floorInsMat")) $("floorInsMat").value = DEFAULTS.floorInsMat;
+    if ($("heatingNow")) $("heatingNow").value = DEFAULTS.heatingNow;
+    if ($("scopNow")) $("scopNow").value = DEFAULTS.scopNow;
+    if ($("annualCostNow")) $("annualCostNow").value = DEFAULTS.annualCostNow;
 
-    $("wallInsNow").value = DEFAULTS.wallInsNow;
-    $("wallInsMat").value = DEFAULTS.wallInsMat;
-    $("roofInsNow").value = DEFAULTS.roofInsNow;
-    $("roofInsMat").value = DEFAULTS.roofInsMat;
-    $("floorInsNow").value = DEFAULTS.floorInsNow;
-    $("floorInsMat").value = DEFAULTS.floorInsMat;
+    if ($("wallInsTarget")) $("wallInsTarget").value = DEFAULTS.wallInsTarget;
+    if ($("roofInsTarget")) $("roofInsTarget").value = DEFAULTS.roofInsTarget;
+    if ($("floorInsTarget")) $("floorInsTarget").value = DEFAULTS.floorInsTarget;
+    if ($("heatingTarget")) $("heatingTarget").value = DEFAULTS.heatingTarget;
+    if ($("scopTarget")) $("scopTarget").value = DEFAULTS.scopTarget;
+    if ($("hdd")) $("hdd").value = DEFAULTS.hdd;
+    if ($("priceGas")) $("priceGas").value = DEFAULTS.priceGas;
+    if ($("priceEl")) $("priceEl").value = DEFAULTS.priceEl;
 
-    $("heatingNow").value = DEFAULTS.heatingNow;
-    $("scopNow").value = DEFAULTS.scopNow;
-    $("annualCostNow").value = DEFAULTS.annualCostNow;
-
-    $("wallInsTarget").value = DEFAULTS.wallInsTarget;
-    $("roofInsTarget").value = DEFAULTS.roofInsTarget;
-    $("floorInsTarget").value = DEFAULTS.floorInsTarget;
-    $("heatingTarget").value = DEFAULTS.heatingTarget;
-    $("scopTarget").value = DEFAULTS.scopTarget;
-
-    $("hdd").value = DEFAULTS.hdd;
-    $("priceGas").value = DEFAULTS.priceGas;
-    $("priceEl").value = DEFAULTS.priceEl;
-
-    $("bridge").value = DEFAULTS.bridge;
-    $("costWallM2").value = DEFAULTS.costWallM2;
-    $("costRoofM2").value = DEFAULTS.costRoofM2;
-    $("costFloorM2").value = DEFAULTS.costFloorM2;
-    $("costHeating").value = DEFAULTS.costHeating;
+    if ($("bridge")) $("bridge").value = DEFAULTS.bridge;
+    if ($("costWallM2")) $("costWallM2").value = DEFAULTS.costWallM2;
+    if ($("costRoofM2")) $("costRoofM2").value = DEFAULTS.costRoofM2;
+    if ($("costFloorM2")) $("costFloorM2").value = DEFAULTS.costFloorM2;
+    if ($("costHeating")) $("costHeating").value = DEFAULTS.costHeating;
   }
 
   // ---------- Core calc ----------
   function readInputs() {
-    const area = clamp(num($("area").value, 100), 20, 1000);
-    const storeys = clamp(num($("storeys").value, 1), 1, 3);
-    const height = clamp(num($("height").value, 2.6), 2.2, 3.2);
-    const wallType = $("wallType").value;
+    const area = clamp(num($("area")?.value, 100), 20, 1000);
+    const storeys = clamp(num($("storeys")?.value, 1), 1, 3);
+    const height = clamp(num($("height")?.value, 2.6), 2.2, 3.2);
+    const wallType = $("wallType") ? $("wallType").value : "brick";
 
-    const winRatio = clamp(num($("winRatio").value, 18), 5, 35);
-    const nAir = clamp(num($("nAir").value, 0.6), 0.2, 1.2);
+    const winRatio = clamp(num($("winRatio")?.value, 18), 5, 35);
+    const nAir = clamp(num($("nAir")?.value, 0.6), 0.2, 1.2);
 
-    const wallInsNow = clamp(num($("wallInsNow").value, 0), 0, 30);
-    const wallInsMat = $("wallInsMat").value;
-    const roofInsNow = clamp(num($("roofInsNow").value, 0), 0, 60);
-    const roofInsMat = $("roofInsMat").value;
-    const floorInsNow = clamp(num($("floorInsNow").value, 0), 0, 20);
-    const floorInsMat = $("floorInsMat").value;
+    const wallInsNow = clamp(num($("wallInsNow")?.value, 0), 0, 30);
+    const wallInsMat = $("wallInsMat") ? $("wallInsMat").value : "eps";
+    const roofInsNow = clamp(num($("roofInsNow")?.value, 0), 0, 60);
+    const roofInsMat = $("roofInsMat") ? $("roofInsMat").value : "rockwool";
+    const floorInsNow = clamp(num($("floorInsNow")?.value, 0), 0, 20);
+    const floorInsMat = $("floorInsMat") ? $("floorInsMat").value : "xps";
 
-    const heatingNow = $("heatingNow").value;
-    const scopNow = clamp(num($("scopNow").value, 3.2), 2.2, 5.5);
-    const annualCostNow = Math.max(0, num($("annualCostNow").value, 0));
+    const heatingNow = $("heatingNow") ? $("heatingNow").value : "gas_old";
+    const scopNow = clamp(num($("scopNow")?.value, 3.2), 2.2, 5.5);
 
-    const wallInsTarget = clamp(num($("wallInsTarget").value, 15), 0, 30);
-    const roofInsTarget = clamp(num($("roofInsTarget").value, 25), 0, 60);
-    const floorInsTarget = clamp(num($("floorInsTarget").value, 10), 0, 20);
+    const annualCostNow = Math.max(0, num($("annualCostNow")?.value, 0));
 
-    const heatingTarget = $("heatingTarget").value;
-    const scopTarget = clamp(num($("scopTarget").value, 3.6), 2.2, 5.5);
+    const wallInsTarget = clamp(num($("wallInsTarget")?.value, 15), 0, 30);
+    const roofInsTarget = clamp(num($("roofInsTarget")?.value, 25), 0, 60);
+    const floorInsTarget = clamp(num($("floorInsTarget")?.value, 10), 0, 20);
 
-    const hdd = clamp(num($("hdd").value, 3000), 1800, 4500);
-    const priceGas = clamp(num($("priceGas").value, 40), 10, 120);
-    const priceEl = clamp(num($("priceEl").value, 70), 20, 180);
+    const heatingTarget = $("heatingTarget") ? $("heatingTarget").value : "hp";
+    const scopTarget = clamp(num($("scopTarget")?.value, 3.6), 2.2, 5.5);
 
-    const bridge = clamp(num($("bridge").value, 10), 0, 25);
+    const hdd = clamp(num($("hdd")?.value, 3000), 1800, 4500);
+    const priceGas = clamp(num($("priceGas")?.value, 40), 10, 120);
+    const priceEl = clamp(num($("priceEl")?.value, 70), 20, 180);
 
-    const costWallM2 = Math.max(0, num($("costWallM2").value, 18000));
-    const costRoofM2 = Math.max(0, num($("costRoofM2").value, 12000));
-    const costFloorM2 = Math.max(0, num($("costFloorM2").value, 15000));
-    const costHeating = Math.max(0, num($("costHeating").value, 3500000));
+    const bridge = clamp(num($("bridge")?.value, 10), 0, 25);
+
+    const costWallM2 = Math.max(0, num($("costWallM2")?.value, 18000));
+    const costRoofM2 = Math.max(0, num($("costRoofM2")?.value, 12000));
+    const costFloorM2 = Math.max(0, num($("costFloorM2")?.value, 15000));
+    const costHeating = Math.max(0, num($("costHeating")?.value, 3500000));
 
     return {
       area, storeys, height, wallType,
@@ -362,16 +368,398 @@
     const wallCost = areas.AwallNet * costs.costWallM2 * (deltaWall / 10);
     const roofCost = areas.Aroof * costs.costRoofM2 * (deltaRoof / 10);
     const floorCost = areas.Afloor * costs.costFloorM2 * (deltaFloor / 10);
+
     const heatCost = costs.costHeating;
 
     return { wallCost, roofCost, floorCost, heatCost };
   }
 
   function renderResult(out) {
-    resultBox.innerHTML = out;
+    if (resultBox) resultBox.innerHTML = out;
   }
 
-  function calcAll() {
+  // ---------- Hőtérkép PRO (3D nézet) ----------
+  let HEATMAP_MODE = "now"; // "now" | "target" | "diff"
+  let LAST_HEATMAP = null;  // { nowScenario, targetScenario, x, calib, Q_real_now, Q_real_target }
+
+  function ensureHeatmapStylesOnce() {
+    if (document.getElementById("ea-heatmap-style")) return;
+    const css = `
+      .heatWrap{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;align-items:start}
+      @media(max-width:980px){.heatWrap{grid-template-columns:1fr}}
+      .heatHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+      .heatTitle{margin:0;font-size:26px;letter-spacing:.2px}
+      .heatSub{margin:6px 0 0;color:rgba(255,255,255,.72)}
+      .segmented{display:flex;gap:8px;flex-wrap:wrap}
+      .segBtn{padding:9px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:rgba(255,255,255,.92);cursor:pointer;font-weight:750;transition:.15s}
+      .segBtn:hover{transform:translateY(-1px);background:rgba(255,255,255,.08)}
+      .segBtn.on{border-color:rgba(90,190,255,.45);box-shadow:0 0 0 3px rgba(90,190,255,.15) inset}
+      .heatCard{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:18px;padding:14px}
+      .house{position:relative;border:1px solid rgba(255,255,255,.10);border-radius:18px;background:rgba(255,255,255,.03);padding:16px}
+      .houseGrid{display:grid;grid-template-rows:80px 1fr 80px;gap:10px}
+      .roof{border-radius:14px;padding:10px;display:flex;align-items:center;justify-content:center;font-weight:850}
+      .mid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+      .wall{border-radius:14px;padding:10px;display:flex;align-items:center;justify-content:center;font-weight:850;min-height:120px}
+      .win{border-radius:14px;padding:10px;display:flex;align-items:center;justify-content:center;font-weight:900;min-height:120px;transform:scale(.92)}
+      .floor{border-radius:14px;padding:10px;display:flex;align-items:center;justify-content:center;font-weight:850}
+      .vent{position:absolute;left:18px;bottom:18px;border-radius:999px;padding:9px 12px;font-weight:850;border:1px solid rgba(255,255,255,.14)}
+      .legend{position:absolute;right:14px;top:14px;border-radius:14px;border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.22);padding:10px 10px;font-size:12px;color:rgba(255,255,255,.75)}
+      .legendRow{display:flex;align-items:center;gap:8px;margin:4px 0}
+      .dot{width:10px;height:10px;border-radius:50%}
+      .bars .barRow{margin:10px 0 14px}
+      .bars .barTop{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+      .bars .barName{font-weight:900}
+      .bars .barVal{color:rgba(255,255,255,.72);font-weight:750}
+      .barTrack{height:10px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);overflow:hidden;margin-top:6px}
+      .barFill{height:100%;border-radius:999px}
+      .miniExplain{margin-top:10px;color:rgba(255,255,255,.68);font-size:13px;line-height:1.35}
+      .heatSummary{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:16px;padding:12px;margin-bottom:12px}
+      .heatSummary b{font-weight:950}
+      .heatSummary .line{display:flex;justify-content:space-between;gap:10px;margin:6px 0;color:rgba(255,255,255,.80)}
+      .heatTip{margin-top:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);border-radius:16px;padding:12px}
+      .heatTip .head{font-weight:950;margin-bottom:6px}
+      .tooltipBox{position:absolute;z-index:50;min-width:260px;max-width:320px;border-radius:16px;border:1px solid rgba(255,255,255,.14);background:rgba(10,14,24,.92);box-shadow:0 18px 55px rgba(0,0,0,.45);padding:12px;color:rgba(255,255,255,.92);display:none}
+      .tooltipBox .tTitle{font-weight:950;margin-bottom:6px}
+      .tooltipBox .tRow{display:flex;justify-content:space-between;gap:10px;color:rgba(255,255,255,.78);margin:4px 0}
+      .tooltipBox .tHint{margin-top:8px;color:rgba(255,255,255,.68);font-size:12.5px;line-height:1.35}
+      .clickable{cursor:pointer;transition:.12s}
+      .clickable:hover{transform:translateY(-1px);filter:brightness(1.05)}
+    `;
+    const style = document.createElement("style");
+    style.id = "ea-heatmap-style";
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  function tipsForKey(key) {
+    const map = {
+      roof: "Födém/padlás: 20–30 cm sok háznál a legjobb első lépés.",
+      wall: "Fal: 12–15 cm már jó szint, hőhidak + csomópontok számítanak.",
+      floor: "Padló/aljzat: komfortot is ad, de bontás miatt drágább lehet.",
+      win: "Ablak: ha nagyon régi, sokat dob, de beépítés + páratechnika fontos.",
+      vent: "Légcsere: szél, réseken szökik a hő. Légzárás sokszor olcsó nagy nyereség."
+    };
+    return map[key] || "";
+  }
+
+  function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+
+  // Színlogika:
+  // - MOST/CÉL: top1 piros, top2 narancs, többi zöld (de intenzitás arányos)
+  // - KÜLÖNBSÉG: "nyereség" (kék->zöld) intenzitással
+  function colorForLoss(rank, t) {
+    // t: 0..1 (arány)
+    // top1 pirosas, top2 narancsos, egyéb zöldes
+    if (rank === 0) {
+      return `linear-gradient(135deg, rgba(255,110,120,${0.30 + 0.45*t}), rgba(255,190,90,${0.08 + 0.20*t}))`;
+    }
+    if (rank === 1) {
+      return `linear-gradient(135deg, rgba(255,190,90,${0.25 + 0.40*t}), rgba(90,220,170,${0.06 + 0.14*t}))`;
+    }
+    return `linear-gradient(135deg, rgba(90,220,170,${0.18 + 0.38*t}), rgba(90,190,255,${0.05 + 0.10*t}))`;
+  }
+
+  function colorForGain(t) {
+    // t: 0..1 (mennyit javul)
+    return `linear-gradient(135deg, rgba(90,190,255,${0.16 + 0.42*t}), rgba(90,220,170,${0.12 + 0.40*t}))`;
+  }
+
+  function computeBreakdown(scenario) {
+    const b = scenario.H.breakdown; // {wall, win, roof, floor, vent}
+    const total = Math.max(1e-9, scenario.H.H);
+    const parts = [
+      { key: "roof", name: "Födém", H: b.roof },
+      { key: "floor", name: "Padló", H: b.floor },
+      { key: "wall", name: "Fal", H: b.wall },
+      { key: "vent", name: "Légcsere", H: b.vent },
+      { key: "win", name: "Ablak", H: b.win }
+    ];
+    parts.forEach(p => { p.share = p.H / total; });
+    // rang MOST/CÉL színezéshez
+    const ranked = [...parts].sort((a, b) => b.H - a.H).map(p => p.key);
+    parts.forEach(p => { p.rank = ranked.indexOf(p.key); });
+    return { total, parts, rankedKeys: ranked };
+  }
+
+  function computeDiff(nowScenario, targetScenario) {
+    const n = nowScenario.H.breakdown;
+    const t = targetScenario.H.breakdown;
+    const diff = {
+      roof: Math.max(0, n.roof - t.roof),
+      floor: Math.max(0, n.floor - t.floor),
+      wall: Math.max(0, n.wall - t.wall),
+      vent: Math.max(0, n.vent - t.vent),
+      win: Math.max(0, n.win - t.win)
+    };
+    const totalGain = Math.max(1e-9, diff.roof + diff.floor + diff.wall + diff.vent + diff.win);
+    const parts = [
+      { key: "roof", name: "Födém", H: diff.roof },
+      { key: "floor", name: "Padló", H: diff.floor },
+      { key: "wall", name: "Fal", H: diff.wall },
+      { key: "vent", name: "Légcsere", H: diff.vent },
+      { key: "win", name: "Ablak", H: diff.win }
+    ];
+    parts.forEach(p => { p.share = p.H / totalGain; });
+    const ranked = [...parts].sort((a, b) => b.H - a.H).map(p => p.key);
+    parts.forEach(p => { p.rank = ranked.indexOf(p.key); });
+    return { total: totalGain, parts, rankedKeys: ranked };
+  }
+
+  function renderHeatmapUI() {
+    if (!view3d) return;
+    ensureHeatmapStylesOnce();
+
+    // Ha a 3D nézetedben van már valami, felülírjuk a belsejét erre a PRO UI-ra:
+    view3d.innerHTML = `
+      <div class="heatHeader">
+        <div>
+          <h2 class="heatTitle">Profi hőtérkép (MVP)</h2>
+          <div class="heatSub">A hőtérkép a kalkulátor adataiból számol: fal / ablak / födém / padló / légcsere. Válts: <b>MOST</b> • <b>CÉL</b> • <b>KÜLÖNBSÉG</b>.</div>
+        </div>
+        <div class="segmented">
+          <button class="segBtn" id="hmNow">MOST</button>
+          <button class="segBtn" id="hmTarget">CÉL</button>
+          <button class="segBtn" id="hmDiff">KÜLÖNBSÉG</button>
+        </div>
+      </div>
+
+      <div class="heatWrap" style="margin-top:14px;">
+        <div class="heatCard">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;">
+            <div style="font-weight:950;">Ház – hőveszteség vizuálisan</div>
+            <div class="muted" style="font-size:13px;">Tipp: módosíts a kalkulátorban, majd gyere vissza ide – automatikusan frissül.</div>
+          </div>
+
+          <div class="house" style="margin-top:12px;">
+            <div class="legend">
+              <div class="legendRow"><span class="dot" style="background:rgba(255,110,120,.85)"></span> top veszteség</div>
+              <div class="legendRow"><span class="dot" style="background:rgba(255,190,90,.85)"></span> 2. hely</div>
+              <div class="legendRow"><span class="dot" style="background:rgba(90,220,170,.85)"></span> kisebb</div>
+              <div class="legendRow"><span class="dot" style="background:rgba(90,190,255,.85)"></span> nyereség (különbség)</div>
+            </div>
+
+            <div class="houseGrid">
+              <div class="roof clickable" id="hmRoof">Födém</div>
+              <div class="mid">
+                <div class="wall clickable" id="hmWallL">Fal</div>
+                <div class="win clickable" id="hmWin">Ablak</div>
+                <div class="wall clickable" id="hmWallR">Fal</div>
+              </div>
+              <div class="floor clickable" id="hmFloor">Padló</div>
+            </div>
+
+            <div class="vent clickable" id="hmVent">Légcsere</div>
+
+            <div class="miniExplain" style="margin-top:12px;">
+              A színezés az egyes elemek <b>H (W/K)</b> hozzájárulásán alapul (UA + Hvent), hőhíd-korrekcióval.
+              <span class="muted">MOST/CÉL: top1 piros, top2 narancs. KÜLÖNBSÉG: ahol a legtöbbet javulsz, ott a legerősebb a “nyereség” szín.</span>
+            </div>
+
+            <div class="tooltipBox" id="hmTip"></div>
+          </div>
+        </div>
+
+        <div class="heatCard">
+          <div class="heatSummary" id="hmSummary">
+            <div style="font-weight:950;">Gyors összefoglaló</div>
+            <div class="muted" style="margin-top:6px;">Kattints az <b>Elemzés</b>-re a kalkulátoron, vagy csak állíts értékeket → itt frissül.</div>
+          </div>
+
+          <div class="bars" id="hmBars">
+            <!-- dinamikus -->
+          </div>
+
+          <div class="heatTip" id="hmInterpret">
+            <div class="head">Gyors értelmezés</div>
+            <div class="muted" id="hmInterpretTxt">MOST: megmutatja, hogy a jelenlegi állapotban hol megy el a hő arányosan (H bontás).</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // mode buttons
+    const hmNow = $("hmNow");
+    const hmTarget = $("hmTarget");
+    const hmDiff = $("hmDiff");
+    const setOn = () => {
+      [hmNow, hmTarget, hmDiff].forEach(b => b && b.classList.remove("on"));
+      if (HEATMAP_MODE === "now") hmNow && hmNow.classList.add("on");
+      if (HEATMAP_MODE === "target") hmTarget && hmTarget.classList.add("on");
+      if (HEATMAP_MODE === "diff") hmDiff && hmDiff.classList.add("on");
+    };
+    if (hmNow) hmNow.addEventListener("click", () => { HEATMAP_MODE = "now"; setOn(); heatmapApply(LAST_HEATMAP); });
+    if (hmTarget) hmTarget.addEventListener("click", () => { HEATMAP_MODE = "target"; setOn(); heatmapApply(LAST_HEATMAP); });
+    if (hmDiff) hmDiff.addEventListener("click", () => { HEATMAP_MODE = "diff"; setOn(); heatmapApply(LAST_HEATMAP); });
+    setOn();
+
+    // click tooltip
+    const tip = $("hmTip");
+    function attachTip(elId, key) {
+      const el = $(elId);
+      if (!el || !tip) return;
+      el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        showTipForKey(key, el);
+      });
+    }
+    attachTip("hmRoof", "roof");
+    attachTip("hmFloor", "floor");
+    attachTip("hmWallL", "wall");
+    attachTip("hmWallR", "wall");
+    attachTip("hmWin", "win");
+    attachTip("hmVent", "vent");
+
+    document.addEventListener("click", () => {
+      const t = $("hmTip");
+      if (t) t.style.display = "none";
+    }, { passive: true });
+  }
+
+  function showTipForKey(key, anchorEl) {
+    const tip = $("hmTip");
+    if (!tip || !LAST_HEATMAP) return;
+
+    const nowB = LAST_HEATMAP.nowScenario.H.breakdown;
+    const tarB = LAST_HEATMAP.targetScenario.H.breakdown;
+
+    const now = nowB[key];
+    const tar = tarB[key];
+    const diff = Math.max(0, now - tar);
+    const pct = now > 0 ? (diff / now) : 0;
+
+    const names = { roof: "Födém", floor: "Padló", wall: "Fal", win: "Ablak", vent: "Légcsere" };
+    const title = names[key] || key;
+
+    tip.innerHTML = `
+      <div class="tTitle">${title}</div>
+      <div class="tRow"><span>MOST H</span><b>${Math.round(now)} W/K</b></div>
+      <div class="tRow"><span>CÉL H</span><b>${Math.round(tar)} W/K</b></div>
+      <div class="tRow"><span>Javulás</span><b>-${Math.round(diff)} W/K (${fmtPct(pct*100)})</b></div>
+      <div class="tHint">${tipsForKey(key)}</div>
+    `;
+
+    // pozíció
+    const house = anchorEl.closest(".house") || view3d;
+    const rA = anchorEl.getBoundingClientRect();
+    const rH = house.getBoundingClientRect();
+    const left = clamp((rA.left - rH.left) + 10, 8, (rH.width - 340));
+    const top = clamp((rA.top - rH.top) + 10, 8, (rH.height - 180));
+
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+    tip.style.display = "block";
+  }
+
+  function heatmapApply(state) {
+    if (!state) return;
+    const { nowScenario, targetScenario } = state;
+
+    const roofEl = $("hmRoof");
+    const floorEl = $("hmFloor");
+    const wallL = $("hmWallL");
+    const wallR = $("hmWallR");
+    const winEl = $("hmWin");
+    const ventEl = $("hmVent");
+
+    const bars = $("hmBars");
+    const summary = $("hmSummary");
+    const interpretTxt = $("hmInterpretTxt");
+
+    // adat kiválasztása nézet alapján
+    let pack;
+    if (HEATMAP_MODE === "now") pack = computeBreakdown(nowScenario);
+    else if (HEATMAP_MODE === "target") pack = computeBreakdown(targetScenario);
+    else pack = computeDiff(nowScenario, targetScenario);
+
+    const maxH = Math.max(...pack.parts.map(p => p.H), 1e-9);
+
+    function paintElement(el, key) {
+      if (!el) return;
+      const p = pack.parts.find(x => x.key === key);
+      const t = clamp01(p.H / maxH);
+
+      if (HEATMAP_MODE === "diff") {
+        el.style.background = colorForGain(t);
+        el.style.border = "1px solid rgba(90,190,255,.28)";
+      } else {
+        el.style.background = colorForLoss(p.rank, t);
+        el.style.border = "1px solid rgba(255,255,255,.14)";
+      }
+    }
+
+    paintElement(roofEl, "roof");
+    paintElement(floorEl, "floor");
+    paintElement(wallL, "wall");
+    paintElement(wallR, "wall");
+    paintElement(winEl, "win");
+    paintElement(ventEl, "vent");
+
+    // Bars + számok
+    if (bars) {
+      const partsSorted = [...pack.parts].sort((a, b) => b.H - a.H);
+      bars.innerHTML = `
+        <div style="font-weight:950;margin-bottom:8px;">Bontás (arány + számok)</div>
+        ${partsSorted.map(p => {
+          const pct = pack.total > 0 ? (p.H / pack.total) : 0;
+          const fill = clamp01(p.H / maxH);
+          const fillStyle = (HEATMAP_MODE === "diff")
+            ? `background:${colorForGain(fill)};`
+            : `background:${colorForLoss(p.rank, fill)};`;
+          return `
+            <div class="barRow">
+              <div class="barTop">
+                <div class="barName">${p.name}</div>
+                <div class="barVal">${(pct*100).toFixed(1)}%</div>
+              </div>
+              <div class="barTrack"><div class="barFill" style="width:${(pct*100).toFixed(1)}%;${fillStyle}"></div></div>
+              <div class="muted" style="margin-top:6px;font-weight:750;">H hozzájárulás: ${Math.round(p.H)} W/K</div>
+            </div>
+          `;
+        }).join("")}
+      `;
+    }
+
+    // Summary
+    if (summary) {
+      const top = [...pack.parts].sort((a, b) => b.H - a.H)[0];
+      const second = [...pack.parts].sort((a, b) => b.H - a.H)[1];
+      const label = (HEATMAP_MODE === "now") ? "MOST" : (HEATMAP_MODE === "target") ? "CÉL" : "KÜLÖNBSÉG";
+
+      // extra: MOST vs CÉL össz javulás gyorsan
+      const totalNow = Math.max(1e-9, nowScenario.H.H);
+      const totalTarget = Math.max(1e-9, targetScenario.H.H);
+      const totalImprove = 1 - (totalTarget / totalNow);
+
+      summary.innerHTML = `
+        <div style="font-weight:950;">Gyors összefoglaló</div>
+        <div class="line"><span>Nézet</span><b>${label}</b></div>
+        <div class="line"><span>TOP elem</span><b>${top.name}</b></div>
+        <div class="line"><span>2. elem</span><b>${second.name}</b></div>
+        <div class="line"><span>Össz. H (MOST)</span><b>${Math.round(totalNow)} W/K</b></div>
+        <div class="line"><span>Össz. H (CÉL)</span><b>${Math.round(totalTarget)} W/K</b></div>
+        <div class="line"><span>Várható javulás</span><b>${fmtPct(totalImprove*100)}</b></div>
+        <div class="muted" style="margin-top:8px;font-size:13px;">
+          Tipp: a <b>KÜLÖNBSÉG</b> nézetben azt látod, hol nyersz a legtöbbet (W/K-ben).
+        </div>
+      `;
+    }
+
+    // Interpretáció
+    if (interpretTxt) {
+      if (HEATMAP_MODE === "now") interpretTxt.textContent = "MOST: megmutatja, hogy a jelenlegi állapotban hol megy el a hő arányosan (H bontás).";
+      if (HEATMAP_MODE === "target") interpretTxt.textContent = "CÉL: megmutatja, hogy a fejlesztett állapotban hol marad a legnagyobb hőveszteség.";
+      if (HEATMAP_MODE === "diff") interpretTxt.textContent = "KÜLÖNBSÉG: megmutatja, hol javulsz a legtöbbet (MOST H − CÉL H). Minél erősebb a szín, annál nagyobb a nyereség.";
+    }
+  }
+
+  function heatmapRenderFromInputs() {
+    if (!view3d) return;
+
+    // PRO UI csak egyszer épüljön fel
+    if (!document.getElementById("hmNow")) {
+      renderHeatmapUI();
+    }
+
     const x = readInputs();
 
     const nowScenario = computeScenario({
@@ -382,6 +770,49 @@
       floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
     });
 
+    const targetScenario = computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+    });
+
+    // kalibráció (ugyanaz, mint a kalkulátorban): MOST Ft/év -> Q_real_now, Q_model_now -> calib
+    const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
+    const Q_real_now = heatDemandFromCost(x.annualCostNow, x.heatingNow, x.priceGas, x.priceEl, x.scopNow);
+    const calib = (Q_model_now > 0) ? (Q_real_now / Q_model_now) : 1;
+
+    const Q_model_target = annualHeatDemandKWh(targetScenario.H.H, x.hdd);
+    const Q_real_target = Q_model_target * calib;
+
+    LAST_HEATMAP = { nowScenario, targetScenario, x, calib, Q_real_now, Q_real_target };
+    heatmapApply(LAST_HEATMAP);
+
+    // állítsuk a gombok "on" állapotát is
+    const hmNow = $("hmNow");
+    const hmTarget = $("hmTarget");
+    const hmDiff = $("hmDiff");
+    [hmNow, hmTarget, hmDiff].forEach(b => b && b.classList.remove("on"));
+    if (HEATMAP_MODE === "now") hmNow && hmNow.classList.add("on");
+    if (HEATMAP_MODE === "target") hmTarget && hmTarget.classList.add("on");
+    if (HEATMAP_MODE === "diff") hmDiff && hmDiff.classList.add("on");
+  }
+
+  // ---------- Kalkulátor eredmény (változatlanul, de a végén frissítjük a hőtérképet is) ----------
+  function calcAll() {
+    const x = readInputs();
+
+    // Szenárió (MOST)
+    const nowScenario = computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
+    });
+
+    // Szenárió (CÉL) – anyagokat a MOST anyagból vesszük (egyszerűsítés)
     const targetScenario = computeScenario({
       area: x.area, storeys: x.storeys, height: x.height,
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
@@ -410,6 +841,7 @@
 
     const savingYear = Math.max(0, costNow - costTarget);
     const savingMonth = savingYear / 12;
+
     const improve = (Q_real_now > 0) ? (1 - (Q_real_target / Q_real_now)) : 0;
 
     function costOnly(change) {
@@ -445,10 +877,10 @@
     const saveOnlyHeat = Math.max(0, costNow - costOnlyHeat);
 
     const prio = [
-      { k: "Fűtés", v: saveOnlyHeat },
       { k: "Födém/padlás", v: saveOnlyRoof },
       { k: "Fal", v: saveOnlyWall },
-      { k: "Padló/aljzat", v: saveOnlyFloor }
+      { k: "Padló/aljzat", v: saveOnlyFloor },
+      { k: "Fűtés", v: saveOnlyHeat }
     ].sort((a, b) => b.v - a.v);
 
     const inv = investmentCosts(
@@ -556,357 +988,35 @@
 
     renderResult(html);
 
-    // ha épp 3D nézeten van, frissüljön
-    if ((location.hash || "").includes("3d")) updateHeatmap();
+    // PRO: hőtérkép frissítése is, hogy a 3D nézet azonnal kész legyen
+    try {
+      LAST_HEATMAP = { nowScenario, targetScenario, x, calib, Q_real_now, Q_real_target };
+      if (document.getElementById("hmNow")) heatmapApply(LAST_HEATMAP);
+    } catch (e) {}
   }
 
   // events
-  btnRun.addEventListener("click", calcAll);
-  btnReset.addEventListener("click", () => {
+  if (btnRun) btnRun.addEventListener("click", calcAll);
+  if (btnReset) btnReset.addEventListener("click", () => {
     setDefaults();
     renderResult(`
       <div class="sectionTitle">Eredmény</div>
       <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
     `);
-    if ((location.hash || "").includes("3d")) updateHeatmap();
+
+    // PRO: reset után is frissítsük a hőtérképet, ha már megnyitották
+    try {
+      if (document.getElementById("hmNow")) heatmapRenderFromInputs();
+    } catch (e) {}
   });
 
-  // init defaults
+  // init
   setDefaults();
 
-  // ---------- TUDÁSTÁR ----------
-  const DOCS = [
-    {
-      id: "hdd",
-      cat: "Alapok",
-      read: "~3 perc",
-      tags: ["HDD", "alapok"],
-      title: "Mi az a HDD (fűtési foknap) és miért számít?",
-      body: `
-A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.
-Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<br/><br/>
-<b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/>
-<b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.
-      `.trim()
-    },
-    {
-      id: "infil",
-      cat: "Alapok",
-      read: "~4 perc",
-      tags: ["légcsere", "infiltráció"],
-      title: "Légcsere (infiltráció): a láthatatlan pénzégető",
-      body: `
-A ház nem csak falon keresztül veszít hőt: a részeken, nyílászárókon, résekben <b>ki-be áramlik a levegő</b>.
-Ez sokszor nagyobb tétel, mint gondolnád.<br/><br/>
-<b>Tipikus jelek:</b> huzat, hideg padló, penész sarkokban, gyors kihűlés.<br/><br/>
-<b>Mit tehetsz?</b> Nyílászáró beállítás/tömítés, légzárás, padlásfeljáró tömítése, kémény/áttörések rendbetétele.
-      `.trim()
-    },
-    {
-      id: "roof",
-      cat: "Szigetelés",
-      read: "~3 perc",
-      tags: ["födém", "prioritás"],
-      title: "Miért a födém a legjobb első lépés sok háznál?",
-      body: `
-A meleg levegő felfelé száll, ezért a födém/padlás felé gyakran óriási a veszteség.
-Általában gyorsan kivitelezhető, és <b>nagyon jó a megtérülése</b>.<br/><br/>
-<b>Irány:</b> 20–30 cm födémszigetelés sok esetben “best buy”.
-      `.trim()
-    },
-    {
-      id: "wall",
-      cat: "Szigetelés",
-      read: "~4 perc",
-      tags: ["fal", "EPS", "kőzetgyapot"],
-      title: "Fal szigetelés: miért nem mindegy 5 cm vs 15 cm?",
-      body: `
-A fal U-értéke a szigeteléssel látványosan javul, de nem lineárisan.
-5 cm már segít, de 12–15 cm gyakran sokkal jobb kompromisszum.<br/><br/>
-<b>Fontos:</b> ne csak vastagság legyen: lábazat, hőhíd, dübelezés, hálózás, csomópontok.
-      `.trim()
-    },
-    {
-      id: "floor",
-      cat: "Szigetelés",
-      read: "~3 perc",
-      tags: ["padló", "komfort"],
-      title: "Padló/aljzat szigetelés: mikor éri meg?",
-      body: `
-A padló szigetelése sokszor <b>komfortot</b> hoz: melegebb padló, kisebb huzatérzet.
-Megtérülésben vegyes: ha nagy a padló veszteség (pl. alápincézett, hideg talaj), akkor jó lépés lehet.
-      `.trim()
-    },
-    {
-      id: "heat",
-      cat: "Fűtés",
-      read: "~5 perc",
-      tags: ["fűtés", "SCOP"],
-      title: "Régi gázkazán vs kondenz vs hőszivattyú: miért változik a matek?",
-      body: `
-Nem ugyanaz, hogy a hőigényt milyen hatásfokkal állítod elő.
-Régi kazánnál rosszabb a hasznosítás, kondenznál jobb, hőszivattyúnál pedig a COP/SCOP számít.<br/><br/>
-<b>Tipp:</b> előbb szigetelés/légzárás, utána fűtéscsere – így kisebb gép is elég lehet.
-      `.trim()
-    },
-    {
-      id: "bridge",
-      cat: "Tipikus hibák",
-      read: "~4 perc",
-      tags: ["hőhíd", "penész"],
-      title: "Hőhidak: a leggyakoribb “nem értem miért penészedik” ok",
-      body: `
-A hőhíd olyan pont, ahol a hő könnyebben elszökik (koszorú, áthidaló, lábazat, erkélycsatlakozás).
-Ott hidegebb a felület → kicsapódik a pára → penész.<br/><br/>
-Ezért fontos a csomóponti gondolkodás, nem csak a “cm”.
-      `.trim()
-    },
-    {
-      id: "checklist",
-      cat: "Kérdéslista",
-      read: "~6 perc",
-      tags: ["kérdések", "ellenőrzés"],
-      title: "Kérdéslista szakiknak: mit kérdezz, hogy ne bukj pénzt",
-      body: `
-<b>Gyors lista:</b><br/>
-• Milyen rétegrendet javasolsz és miért?<br/>
-• Lábazat, koszorú, nyílászáró körül hogyan oldod meg?<br/>
-• Páratechnika: kell-e párafék/páraáteresztés?<br/>
-• Garancia, referencia, határidő?<br/>
-• Pontos anyaglista + munkadíj bontás?<br/><br/>
-Ezekkel elkerülhető sok “jó lesz az úgy” típusú bukás.
-      `.trim()
+  // PRO: ha valaki közvetlenül a #3d-re jön, akkor felépítjük a hőtérképet
+  try {
+    if ((location.hash || "").includes("3d")) {
+      heatmapRenderFromInputs();
     }
-  ];
-
-  let docFilterCat = "Összes";
-  let docSearch = "";
-  let docSelectedId = DOCS[0].id;
-
-  function setDocChipActive(btn) {
-    const ids = ["docChipAll","docChipBasics","docChipIns","docChipHeat","docChipMist","docChipList"];
-    ids.forEach(i => $(i)?.classList.remove("active"));
-    btn?.classList.add("active");
-  }
-
-  function getDocCatKey(catLabel){
-    return catLabel; // ugyanazt használjuk
-  }
-
-  function renderDocs() {
-    const searchEl = $("docSearch");
-    const listEl = $("docList");
-    const viewEl = $("docView");
-    const countEl = $("docCount");
-    if (!listEl || !viewEl) return;
-
-    const q = (docSearch || "").trim().toLowerCase();
-    const filtered = DOCS.filter(d => {
-      const catOk = (docFilterCat === "Összes") ? true : d.cat === docFilterCat;
-      if (!catOk) return false;
-      if (!q) return true;
-      return (
-        d.title.toLowerCase().includes(q) ||
-        d.body.toLowerCase().includes(q) ||
-        d.tags.join(" ").toLowerCase().includes(q)
-      );
-    });
-
-    countEl.textContent = String(filtered.length);
-
-    if (!filtered.some(d => d.id === docSelectedId) && filtered.length) {
-      docSelectedId = filtered[0].id;
-    }
-
-    listEl.innerHTML = filtered.map(d => {
-      const active = d.id === docSelectedId ? "active" : "";
-      return `
-        <div class="docItem ${active}" data-doc="${d.id}">
-          <div class="docTitle">${d.title}</div>
-          <p class="docMeta">kategória: <b>${d.cat}</b> • ${d.read} • #${d.tags.join(" #")}</p>
-        </div>
-      `;
-    }).join("");
-
-    const sel = DOCS.find(d => d.id === docSelectedId) || filtered[0];
-    if (sel) {
-      viewEl.innerHTML = `
-        <div class="miniTitle">${sel.title}</div>
-        <div class="docMeta">kategória: <b>${sel.cat}</b> • ${sel.read} • #${sel.tags.join(" #")}</div>
-        <div class="docBody">${sel.body}</div>
-
-        <details style="margin-top:14px;">
-          <summary>▶ Gyors emlékeztető: mit számol a kalkulátor?</summary>
-          <div class="docBody">
-            <b>H</b> = Σ(U·A) + <b>Hvent</b><br/>
-            Hvent ≈ 0.33 · n · V<br/>
-            <b>Q</b> ≈ H · HDD · 24 / 1000<br/><br/>
-            A “MOST” Ft/év alapján a modell kalibrál (hogy a bázis a te valós költséged legyen).
-          </div>
-        </details>
-
-        <div class="docTags">
-          ${sel.tags.map(t => `<span class="tag">#${t}</span>`).join("")}
-        </div>
-      `;
-    } else {
-      viewEl.innerHTML = `<div class="miniTitle">Nincs találat</div><div class="muted">Próbáld más kulcsszóval.</div>`;
-    }
-
-    listEl.querySelectorAll(".docItem").forEach(el => {
-      el.addEventListener("click", () => {
-        docSelectedId = el.getAttribute("data-doc");
-        renderDocs();
-      });
-    });
-
-    if (searchEl) {
-      searchEl.value = docSearch;
-    }
-  }
-
-  // docs events
-  $("docSearch")?.addEventListener("input", (e) => {
-    docSearch = e.target.value || "";
-    renderDocs();
-  });
-
-  $("docChipAll")?.addEventListener("click", () => { docFilterCat = "Összes"; setDocChipActive($("docChipAll")); renderDocs(); });
-  $("docChipBasics")?.addEventListener("click", () => { docFilterCat = "Alapok"; setDocChipActive($("docChipBasics")); renderDocs(); });
-  $("docChipIns")?.addEventListener("click", () => { docFilterCat = "Szigetelés"; setDocChipActive($("docChipIns")); renderDocs(); });
-  $("docChipHeat")?.addEventListener("click", () => { docFilterCat = "Fűtés"; setDocChipActive($("docChipHeat")); renderDocs(); });
-  $("docChipMist")?.addEventListener("click", () => { docFilterCat = "Tipikus hibák"; setDocChipActive($("docChipMist")); renderDocs(); });
-  $("docChipList")?.addEventListener("click", () => { docFilterCat = "Kérdéslista"; setDocChipActive($("docChipList")); renderDocs(); });
-
-  // ---------- HEATMAP (MVP) ----------
-  let hmMode = "now"; // now | target | delta
-
-  const hmModeNow = $("hmModeNow");
-  const hmModeTarget = $("hmModeTarget");
-  const hmModeDelta = $("hmModeDelta");
-
-  function setHmActive(btn){
-    [hmModeNow, hmModeTarget, hmModeDelta].forEach(b => b?.classList.remove("active"));
-    btn?.classList.add("active");
-  }
-
-  hmModeNow?.addEventListener("click", () => { hmMode = "now"; setHmActive(hmModeNow); updateHeatmap(); });
-  hmModeTarget?.addEventListener("click", () => { hmMode = "target"; setHmActive(hmModeTarget); updateHeatmap(); });
-  hmModeDelta?.addEventListener("click", () => { hmMode = "delta"; setHmActive(hmModeDelta); updateHeatmap(); });
-
-  function colorForValue01(x){
-    // 0..1 => zöld -> sárga -> piros
-    const v = clamp(x, 0, 1);
-    const r = Math.round(90 + v * (255 - 90));
-    const g = Math.round(220 - v * (220 - 90));
-    const b = Math.round(170 - v * (170 - 110));
-    return `rgba(${r},${g},${b},0.55)`;
-  }
-
-  function setBlock(id, v01){
-    const el = $(id);
-    if (!el) return;
-    el.style.background = colorForValue01(v01);
-  }
-
-  function scenarioFromInputs(which){
-    const x = readInputs();
-    if (which === "now") {
-      return computeScenario({
-        area: x.area, storeys: x.storeys, height: x.height,
-        wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-        wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
-        roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
-      });
-    }
-    return computeScenario({
-      area: x.area, storeys: x.storeys, height: x.height,
-      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
-      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
-    });
-  }
-
-  function updateHeatmap(){
-    const list = $("hmList");
-    if (!list) return;
-
-    const now = scenarioFromInputs("now");
-    const target = scenarioFromInputs("target");
-
-    const partsNow = now.H.parts;
-    const partsTar = target.H.parts;
-
-    const keys = ["roof","wall","window","floor","vent"];
-
-    let parts = {};
-    let explain = "";
-
-    if (hmMode === "now") {
-      parts = partsNow;
-      explain = "MOST: megmutatja, hogy a jelenlegi állapotban hol megy el a hő arányosan (H bontás).";
-    } else if (hmMode === "target") {
-      parts = partsTar;
-      explain = "CÉL: megmutatja, hogy a cél állapotban hol marad veszteség (még szigetelés után is).";
-    } else {
-      // delta: csökkenés = now - target (negatív is lehet, de elvileg csökken)
-      keys.forEach(k => parts[k] = Math.max(0, partsNow[k] - partsTar[k]));
-      explain = "KÜLÖNBSÉG: azt mutatja, hol csökken a legjobban a veszteség MOST → CÉL között. Ez a “hol nyersz a legtöbbet” nézet.";
-    }
-
-    const total = keys.reduce((s,k)=> s + (parts[k]||0), 0) || 1;
-
-    const ratios = {};
-    keys.forEach(k => ratios[k] = (parts[k]||0) / total);
-
-    // vizuális elemek
-    setBlock("hmRoof", ratios.roof);
-    setBlock("hmFloor", ratios.floor);
-    setBlock("hmVent", ratios.vent);
-
-    // fal 3 részre bontva (azonos szín)
-    setBlock("hmWallL", ratios.wall);
-    setBlock("hmWallC", ratios.wall);
-    setBlock("hmWallR", ratios.wall);
-
-    // ablak külön
-    setBlock("hmWin", ratios.window);
-
-    const labelMap = {
-      roof: "Födém",
-      wall: "Fal",
-      window: "Ablak",
-      floor: "Padló",
-      vent: "Légcsere"
-    };
-
-    // lista render
-    const rows = keys
-      .map(k => ({
-        k,
-        label: labelMap[k],
-        val: parts[k] || 0,
-        pct: (ratios[k]||0) * 100
-      }))
-      .sort((a,b)=> b.val - a.val);
-
-    list.innerHTML = rows.map(r => `
-      <div class="hmRow">
-        <div class="hmTop">
-          <div>${r.label}</div>
-          <div>${fmtPct(r.pct)}</div>
-        </div>
-        <div class="hmBar"><div class="hmFill" style="width:${Math.round(r.pct)}%"></div></div>
-        <div class="hmMeta">H hozzájárulás: <b>${r.val.toFixed(0)} W/K</b></div>
-      </div>
-    `).join("");
-
-    const ex = $("hmExplain");
-    if (ex) ex.textContent = explain;
-  }
-
-  // ---------- START ----------
-  initByHash();
+  } catch (e) {}
 })();
