@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Energia Advisor 3D – Valós kalkulátor (C)</title>
-
   <link rel="stylesheet" href="./style.css" />
 </head>
 
@@ -29,6 +28,7 @@
   </header>
 
   <main class="wrap">
+
     <!-- HOME -->
     <section class="card home" id="viewHome">
       <div class="home-hero">
@@ -307,68 +307,102 @@
       </div>
     </section>
 
-    <!-- 3D -->
+    <!-- 3D / HEATMAP -->
     <section class="card" id="view3d" style="display:none;">
-      <h2 class="title">3D nézet (később)</h2>
-      <p class="subtitle">Itt lesz a 3D “dobozház” nézet (Three.js) – a kalkulátor adataiból.</p>
-      <div class="out"><span class="muted">Következő körben jön.</span></div>
-    </section>
-
-    <!-- DOCS (KÉSZ) -->
-    <section class="card" id="viewDocs" style="display:none;">
-      <h2 class="title">Tudástár</h2>
+      <h2 class="title">Profi hőtérkép (MVP)</h2>
       <p class="subtitle">
-        Rövid, érthető cikkek: tipikus hibák, kérdéslista szakiknak, mire figyelj. (SEO + bizalom)
+        A hőtérkép a kalkulátor adataiból számol: fal / ablak / födém / padló / légcsere.
+        Válts: <b>MOST</b> • <b>CÉL</b> • <b>KÜLÖNBSÉG</b>.
       </p>
 
-      <div class="out" style="margin-bottom:12px;">
-        <div class="row" style="grid-template-columns: 1fr;">
-          <label for="docsSearch" style="margin-bottom:6px;">Keresés (cím + tartalom)</label>
-          <input id="docsSearch" type="text" placeholder="Pl.: hőhíd, légcsere, födém, EPS, megtérülés...">
-        </div>
-
-        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
-          <button class="pill active" id="docsCat_all" data-doccat="all">Összes</button>
-          <button class="pill" id="docsCat_alap" data-doccat="alap">Alapok</button>
-          <button class="pill" id="docsCat_szig" data-doccat="szigeteles">Szigetelés</button>
-          <button class="pill" id="docsCat_futes" data-doccat="futes">Fűtés</button>
-          <button class="pill" id="docsCat_hibak" data-doccat="hibak">Tipikus hibák</button>
-          <button class="pill" id="docsCat_lista" data-doccat="checklist">Kérdéslista</button>
-        </div>
-
-        <p class="help" style="margin-top:10px;">
-          Tipp: ezt a Tudástárat később simán át lehet költöztetni külön oldalra / CMS-be, de MVP-nek tökéletes.
-        </p>
+      <div class="heatbar">
+        <button class="pill active" id="hmModeNow">MOST</button>
+        <button class="pill" id="hmModeTarget">CÉL</button>
+        <button class="pill" id="hmModeDelta">KÜLÖNBSÉG</button>
+        <div class="hmHint">Tipp: módosíts a kalkulátorban, majd gyere vissza ide – automatikusan frissül.</div>
       </div>
 
-      <div class="grid" style="grid-template-columns: 0.95fr 1.35fr; align-items:start;">
-        <!-- Lista -->
-        <div class="out" style="min-height: 420px;">
-          <div class="sectionTitle">Cikkek</div>
-          <div class="muted" id="docsCount" style="margin-bottom:10px;">Betöltés...</div>
-          <div id="docsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+      <div class="heatgrid">
+        <div class="heatCard">
+          <div class="miniTitle">Ház – hőveszteség vizuálisan</div>
+
+          <div class="houseWrap">
+            <div class="legend">
+              <div class="lgRow"><span class="lgSw hot"></span> nagy veszteség</div>
+              <div class="lgRow"><span class="lgSw mid"></span> közepes</div>
+              <div class="lgRow"><span class="lgSw cool"></span> kisebb</div>
+            </div>
+
+            <div class="house">
+              <div class="roof" id="hmRoof"><span>Födém</span></div>
+              <div class="walls">
+                <div class="wall left" id="hmWallL"><span>Fal</span></div>
+                <div class="wall center" id="hmWallC">
+                  <div class="window" id="hmWin"><span>Ablak</span></div>
+                </div>
+                <div class="wall right" id="hmWallR"><span>Fal</span></div>
+              </div>
+              <div class="floor" id="hmFloor"><span>Padló</span></div>
+              <div class="vent" id="hmVent"><span>Légcsere</span></div>
+            </div>
+          </div>
+
+          <div class="muted hmSmall">
+            A színezés az egyes elemek <b>H (W/K) hozzájárulásán</b> alapul (UA + Hvent), hőhíd-korrekcióval.
+          </div>
         </div>
 
-        <!-- Cikk tartalom -->
-        <div class="out" style="min-height: 420px;">
-          <div class="sectionTitle" id="docsTitle">Válassz egy cikket bal oldalt</div>
-          <div class="muted" id="docsMeta" style="margin-bottom:10px;"></div>
-          <div id="docsBody" class="muted" style="line-height:1.55;"></div>
+        <div class="heatCard">
+          <div class="miniTitle">Bontás (arány + számok)</div>
+          <div class="hmList" id="hmList"></div>
 
           <div class="hr"></div>
 
-          <details>
-            <summary>Gyors emlékeztető: mit számol a kalkulátor?</summary>
-            <ul>
-              <li><b>H = Σ(U·A) + Hvent</b> (transzmisszió + szellőzési veszteség)</li>
-              <li><b>Hvent ≈ 0.33 · n · V</b> (n= légcsere 1/h, V= térfogat m³)</li>
-              <li><b>Q ≈ H · HDD · 24 / 1000</b> (kWh/év becslés)</li>
-              <li>Majd kalibrálás a <b>MOST Ft/év</b> alapján</li>
-            </ul>
-          </details>
+          <div class="miniTitle">Gyors értelmezés</div>
+          <div class="muted" id="hmExplain">
+            Válassz módot fent (MOST/CÉL/KÜLÖNBSÉG). A “KÜLÖNBSÉG” azt mutatja, hol csökken a legjobban a veszteség.
+          </div>
         </div>
       </div>
     </section>
+
+    <!-- DOCS -->
+    <section class="card" id="viewDocs" style="display:none;">
+      <h2 class="title">Tudástár</h2>
+      <p class="subtitle">Rövid, érthető cikkek: tipikus hibák, kérdéslista szakiknak, mire figyelj. <span class="muted">(SEO + bizalom)</span></p>
+
+      <div class="docsSearch glass2">
+        <div class="miniTitle">Keresés (cím + tartalom)</div>
+        <input id="docSearch" class="docsInput" type="text" placeholder="Pl.: hőhíd, légcsere, födém, EPS, megtérülés..." />
+        <div class="docsChips">
+          <button class="pill active" id="docChipAll">Összes</button>
+          <button class="pill" id="docChipBasics">Alapok</button>
+          <button class="pill" id="docChipIns">Szigetelés</button>
+          <button class="pill" id="docChipHeat">Fűtés</button>
+          <button class="pill" id="docChipMist">Tipikus hibák</button>
+          <button class="pill" id="docChipList">Kérdéslista</button>
+        </div>
+        <div class="muted docsTip">Tipp: ezt a Tudástárat később simán át lehet költöztetni külön oldalra / CMS-be, de MVP-nek tökéletes.</div>
+      </div>
+
+      <div class="docsGrid">
+        <div class="docsLeft glass2">
+          <div class="miniTitle">Cikkek</div>
+          <div class="muted" style="margin-top:4px;"><span id="docCount">0</span> találat</div>
+          <div class="docsList" id="docList"></div>
+        </div>
+
+        <div class="docsRight glass2">
+          <div id="docView">
+            <div class="miniTitle">Válassz egy cikket balról</div>
+            <div class="muted" style="margin-top:8px;">
+              A jobb oldalon megjelenik a cikk tartalma + egy “gyors emlékeztető”.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <div class="foot">
