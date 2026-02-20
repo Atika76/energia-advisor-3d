@@ -103,6 +103,20 @@ window.calculateEnergy = function calculateEnergy(){
 
   const estKwh = Math.round(baseKwh * factor);
   const estSavePct = Math.max(0, Math.round((1 - factor) * 100));
+  const annualCost = Number(document.getElementById("annualCost")?.value || 0);
+const estimatedAnnualSaving = Math.round(annualCost * (estSavePct / 100));
+
+// Nagyon durva beruházási becslések (csak szemléltetés!)
+const estRoofCost = area * 12000;  // födém szigetelés kb. Ft/m²
+const estWallCost = area * 20000;  // fal szigetelés kb. Ft/m²
+
+const roofPayback = estimatedAnnualSaving > 0
+  ? Math.round(estRoofCost / estimatedAnnualSaving)
+  : 0;
+
+const wallPayback = estimatedAnnualSaving > 0
+  ? Math.round(estWallCost / estimatedAnnualSaving)
+  : 0;
 
   box.innerHTML = `
     <div style="display:grid; gap:10px;">
