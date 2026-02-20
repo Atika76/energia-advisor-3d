@@ -41,10 +41,50 @@ btns.docs.addEventListener("click", () => show("docs"));
 
 show("home");
 
+// --------- Helpers ----------
+const money = (n) =>
+  Number.isFinite(n) ? n.toLocaleString("hu-HU") : "-";
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
 /**
- * Alap energia elemzés (MVP)
- * Nem hivatalos tanúsítás, csak döntéstámogatás.
+ * Lépcsős "állapot faktor" 0..1 között:
+ * 1.0 = rossz (nincs/kevés szigetelés)
+ * 0.7 = közepes
+ * 0.55 = jó
+ * 0.45 = nagyon jó
+ *
+ * Így nem tud “véletlenül” 0%-ra kijönni gyenge háznál.
  */
+function wallFactor(cm) {
+  if (cm <= 0) return 1.0;
+  if (cm < 5) return 0.97;
+  if (cm < 10) return 0.92;
+  if (cm < 15) return 0.85;
+  if (cm < 20) return 0.78;
+  return 0.72;
+}
+
+function roofFactor(cm) {
+  if (cm <= 0) return 1.0;
+  if (cm < 10) return 0.90;
+  if (cm < 20) return 0.80;
+  if (cm < 30) return 0.72;
+  return 0.68;
+}
+
+function heatingFactor(type) {
+  // 1.0 = régi gáz (rosszabb)
+  // 0.92 = kondenzációs
+  // 0.82 = hőszivattyú
+  if (type === "kondenzacios") return 0.92;
+  if (type === "hoszivattyu") return 0.82;
+  return 1.0;
+}
+
+// --------- Main calc ----------
 window.calculateEnergy = function calculateEnergy() {
   const area = Number(document.getElementById("area")?.value || 0);
   const wallIns = Number(document.getElementById("wallIns")?.value || 0);
@@ -55,7 +95,7 @@ window.calculateEnergy = function calculateEnergy() {
   const box = document.getElementById("resultBox");
   if (!box) return;
 
-  // alap validálás
+  // validálás
   if (area <= 0) {
     box.innerHTML = `<b>Hiba:</b> add meg az alapterületet (m²).`;
     return;
@@ -69,31 +109,27 @@ window.calculateEnergy = function calculateEnergy() {
     return;
   }
 
-  // “hiány” pontszámok (minél nagyobb, annál sürgősebb)
-  // egyszerű heurisztika célértékekkel
-  const wallNeed = Math.max(0, 15 - wallIns); // cél: 15 cm
-  const roofNeed = Math.max(0, 25 - roofIns); // cél: 25 cm
-
-  // fűtés “bünti”
-  let heatNeed = 0;
+  // fűtés szöveg
   let heatText = "";
   if (heating === "gaz") {
-    heatNeed = 10;
     heatText =
       "Régi gázkazán → magasabb fogyasztás, érdemes korszerűsíteni (ha már a hőszigetelés rendben).";
   } else if (heating === "kondenzacios") {
-    heatNeed = 4;
     heatText =
       "Kondenzációs kazán → közepesen jó, a hőszigetelés sokat javít a költségen.";
   } else if (heating === "hoszivattyu") {
-    heatNeed = 1;
     heatText =
       "Hőszivattyú → jó irány, de akkor a szigetelés/légzárás különösen fontos.";
   }
 
-  // súlyozás: födém általában nagyon megéri → nagyobb súly
+  // --- PRIORITÁS: “hiány” pont ---
+  // Célok: fal 15 cm, födém 25 cm
+  const wallNeed = Math.max(0, 15 - wallIns);
+  const roofNeed = Math.max(0, 25 - roofIns);
+  const heatNeed = heating === "gaz" ? 10 : heating === "kondenzacios" ? 4 : 1;
+
   const scoreWall = wallNeed * 1.0;
-  const scoreRoof = roofNeed * 1.2;
+  const scoreRoof = roofNeed * 1.25; // födém kicsit erősebb
   const scoreHeat = heatNeed * 1.0;
 
   const items = [
@@ -101,66 +137,88 @@ window.calculateEnergy = function calculateEnergy() {
       key: "Födém/padlás szigetelés",
       score: scoreRoof,
       note:
-        roofIns < 15
-          ? "A födém gyakran a leggyorsabban megtérülő lépés."
+        roofIns <= 0
+          ? "Nincs szigetelés → általában az egyik legjobb első lépés."
+          : roofIns < 15
+          ? "Kevés szigetelés → gyorsan javít a komforton és költségen."
           : "Födém rendben vagy közel rendben.",
     },
     {
       key: "Fal hőszigetelés",
       score: scoreWall,
       note:
-        wallIns < 10
+        wallIns <= 0
+          ? "Nincs szigetelés → nagy veszteség, 12–15 cm sokat javít."
+          : wallIns < 10
           ? "5–10 cm alatt sokat veszítesz. 15 cm körül már jó."
           : "Fal szigetelés közepes/jó.",
     },
     { key: "Fűtési rendszer", score: scoreHeat, note: heatText },
   ].sort((a, b) => b.score - a.score);
 
-  // javaslatok
+  // --- AJÁNLÁS SZÖVEG ---
   const recWall =
-    wallIns < 10
+    wallIns <= 0
+      ? "Javaslat: falra 12–15 cm (anyag+falazat függő)."
+      : wallIns < 10
       ? "Javaslat: falra 12–15 cm (anyag+falazat függő)."
       : wallIns < 15
       ? "Javaslat: falon 15 cm körüli szint már jó kompromisszum."
       : "Fal: jó szint (15 cm+).";
 
   const recRoof =
-    roofIns < 10
+    roofIns <= 0
+      ? "Javaslat: födém/padlás 20–30 cm (gyakran a legjobb megtérülés)."
+      : roofIns < 10
       ? "Javaslat: födém/padlás 20–30 cm (gyakran a legjobb megtérülés)."
       : roofIns < 20
       ? "Javaslat: födém/padlás legalább 20–25 cm."
       : "Födém: jó szint (20–25 cm+).";
 
-  // nagyon durva energiaigény becslés (kWh ekvivalens) – csak szemléltetés
-  const baseKwh = area * 140;
+  // --- STABILABB % SZÁMOLÁS ---
+  // 1) összeállítunk egy állapot faktort (minél kisebb, annál jobb)
+  // 2) ezt hasonlítjuk egy “rossz alaphoz” (1.0)
+  // 3) levágjuk 3..55% közé (mert ez MVP irányérték)
+  const wf = wallFactor(wallIns);
+  const rf = roofFactor(roofIns);
+  const hf = heatingFactor(heating);
 
-  const factor =
-    (wallIns < 10 ? 1.0 : wallIns < 15 ? 0.92 : 0.88) *
-    (roofIns < 10 ? 1.0 : roofIns < 20 ? 0.9 : 0.85) *
-    (heating === "gaz" ? 1.0 : heating === "kondenzacios" ? 0.93 : 0.85);
+  // Súlyok: födém 0.45, fal 0.35, fűtés 0.20
+  const combined = wf * 0.35 + rf * 0.45 + hf * 0.20;
 
-  const estKwh = Math.round(baseKwh * factor);
-  const estSavePct = Math.max(0, Math.round((1 - factor) * 100));
+  // Potenciál: rossz (1.0) -> current (combined)
+  let estSavePct = Math.round((1.0 - combined) * 100);
 
-  // ✅ éves megtakarítás becslés Ft-ban
+  // Ha nagyon kevés adat, ne legyen 0% “csendben”
+  // Minimum 3%, maximum 55% (MVP korlát)
+  estSavePct = clamp(estSavePct, 3, 55);
+
+  // --- PÉNZBEN ---
   const estimatedAnnualSaving = Math.round(annualCost * (estSavePct / 100));
 
-  // ✅ nagyon durva beruházási becslés (csak irány!)
-  // (ezeket később csomag/anyag/ár alapján finomítjuk)
-  const estRoofCost = area * 12000; // Ft/m²
-  const estWallCost = area * 20000; // Ft/m²
+  // --- beruházás becslés (irány) ---
+  // Egyszerűbb: csak akkor számoljuk megtérülést, ha az adott elem “hiányos”
+  // Ha már jó (fal>=15 / födém>=20), akkor '-' (nem életszerű most arra költeni)
+  const estRoofCost = area * 12000; // Ft/m² (irány)
+  const estWallCost = area * 20000; // Ft/m² (irány)
+
+  const roofRelevant = roofIns < 20;
+  const wallRelevant = wallIns < 15;
 
   const roofPaybackYears =
-    estimatedAnnualSaving > 0
+    roofRelevant && estimatedAnnualSaving > 0
       ? Math.round(estRoofCost / estimatedAnnualSaving)
       : null;
 
   const wallPaybackYears =
-    estimatedAnnualSaving > 0
+    wallRelevant && estimatedAnnualSaving > 0
       ? Math.round(estWallCost / estimatedAnnualSaving)
       : null;
 
-  const money = (n) => (Number.isFinite(n) ? n.toLocaleString("hu-HU") : "-");
+  // --- kWh “érzet” (csak szemléltetés) ---
+  // A combined alapján kicsit stabilabb
+  const baseKwh = area * 140;
+  const estKwh = Math.round(baseKwh * combined);
 
   box.innerHTML = `
     <div style="display:grid; gap:10px;">
@@ -188,11 +246,15 @@ window.calculateEnergy = function calculateEnergy() {
         <ul style="margin:8px 0 0 18px;">
           <li>Éves fűtési költség: ~${money(annualCost)} Ft</li>
           <li>Éves becsült megtakarítás: ~${money(estimatedAnnualSaving)} Ft</li>
-          <li>Födém szigetelés becsült költség: ~${money(estRoofCost)} Ft → megtérülés: ${
-            roofPaybackYears === null ? "-" : `${roofPaybackYears} év`
+          <li>Födém szigetelés: ${
+            roofRelevant
+              ? `~${money(estRoofCost)} Ft → megtérülés: ${roofPaybackYears === null ? "-" : `${roofPaybackYears} év`}`
+              : "már jó szinten (20 cm+), most nem elsődleges"
           }</li>
-          <li>Fal szigetelés becsült költség: ~${money(estWallCost)} Ft → megtérülés: ${
-            wallPaybackYears === null ? "-" : `${wallPaybackYears} év`
+          <li>Fal szigetelés: ${
+            wallRelevant
+              ? `~${money(estWallCost)} Ft → megtérülés: ${wallPaybackYears === null ? "-" : `${wallPaybackYears} év`}`
+              : "már jó szinten (15 cm+), most nem elsődleges"
           }</li>
         </ul>
       </div>
