@@ -314,11 +314,60 @@
       <div class="out"><span class="muted">Következő körben jön.</span></div>
     </section>
 
-    <!-- DOCS -->
+    <!-- DOCS (KÉSZ) -->
     <section class="card" id="viewDocs" style="display:none;">
-      <h2 class="title">Tudástár (később)</h2>
-      <p class="subtitle">Rövid, érthető cikkek: tipikus hibák, kérdéslista szakiknak, mire figyelj.</p>
-      <div class="out"><span class="muted">Következő körben jön.</span></div>
+      <h2 class="title">Tudástár</h2>
+      <p class="subtitle">
+        Rövid, érthető cikkek: tipikus hibák, kérdéslista szakiknak, mire figyelj. (SEO + bizalom)
+      </p>
+
+      <div class="out" style="margin-bottom:12px;">
+        <div class="row" style="grid-template-columns: 1fr;">
+          <label for="docsSearch" style="margin-bottom:6px;">Keresés (cím + tartalom)</label>
+          <input id="docsSearch" type="text" placeholder="Pl.: hőhíd, légcsere, födém, EPS, megtérülés...">
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <button class="pill active" id="docsCat_all" data-doccat="all">Összes</button>
+          <button class="pill" id="docsCat_alap" data-doccat="alap">Alapok</button>
+          <button class="pill" id="docsCat_szig" data-doccat="szigeteles">Szigetelés</button>
+          <button class="pill" id="docsCat_futes" data-doccat="futes">Fűtés</button>
+          <button class="pill" id="docsCat_hibak" data-doccat="hibak">Tipikus hibák</button>
+          <button class="pill" id="docsCat_lista" data-doccat="checklist">Kérdéslista</button>
+        </div>
+
+        <p class="help" style="margin-top:10px;">
+          Tipp: ezt a Tudástárat később simán át lehet költöztetni külön oldalra / CMS-be, de MVP-nek tökéletes.
+        </p>
+      </div>
+
+      <div class="grid" style="grid-template-columns: 0.95fr 1.35fr; align-items:start;">
+        <!-- Lista -->
+        <div class="out" style="min-height: 420px;">
+          <div class="sectionTitle">Cikkek</div>
+          <div class="muted" id="docsCount" style="margin-bottom:10px;">Betöltés...</div>
+          <div id="docsList" style="display:flex; flex-direction:column; gap:10px;"></div>
+        </div>
+
+        <!-- Cikk tartalom -->
+        <div class="out" style="min-height: 420px;">
+          <div class="sectionTitle" id="docsTitle">Válassz egy cikket bal oldalt</div>
+          <div class="muted" id="docsMeta" style="margin-bottom:10px;"></div>
+          <div id="docsBody" class="muted" style="line-height:1.55;"></div>
+
+          <div class="hr"></div>
+
+          <details>
+            <summary>Gyors emlékeztető: mit számol a kalkulátor?</summary>
+            <ul>
+              <li><b>H = Σ(U·A) + Hvent</b> (transzmisszió + szellőzési veszteség)</li>
+              <li><b>Hvent ≈ 0.33 · n · V</b> (n= légcsere 1/h, V= térfogat m³)</li>
+              <li><b>Q ≈ H · HDD · 24 / 1000</b> (kWh/év becslés)</li>
+              <li>Majd kalibrálás a <b>MOST Ft/év</b> alapján</li>
+            </ul>
+          </details>
+        </div>
+      </div>
     </section>
   </main>
 
