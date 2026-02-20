@@ -1,414 +1,355 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="hu">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Energia Advisor 3D – Valós kalkulátor (C)</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Energia Advisor 3D</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
+  <!-- TOP BAR -->
   <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <div class="logo">EA</div>
-        <div>
-          <h1>Energia Advisor 3D</h1>
-          <small>MVP • valós (C) kalkulátor • később SzakiPiacba integrálható</small>
-        </div>
+    <div class="brand">
+      <div class="logo">EA</div>
+      <div class="brandText">
+        <div class="brandTitle">Energia Advisor 3D</div>
+        <div class="brandSub">MVP • valós (C) kalkulátor • később SzakiPiacba integrálható</div>
       </div>
-
-      <nav class="nav">
-        <button class="pill" id="btnHome">Kezdő</button>
-        <button class="pill" id="btnCalc">Kalkulátor</button>
-        <button class="pill" id="btn3d">3D nézet</button>
-        <button class="pill" id="btnDocs">Tudástár</button>
-      </nav>
     </div>
+
+    <nav class="nav">
+      <button id="btnHome" class="navBtn active">Kezdő</button>
+      <button id="btnCalc" class="navBtn">Kalkulátor</button>
+      <button id="btn3d" class="navBtn">3D nézet</button>
+      <button id="btnDocs" class="navBtn">Tudástár</button>
+    </nav>
   </header>
 
-  <main class="wrap">
-
+  <main class="container">
     <!-- HOME -->
-    <section class="card home" id="viewHome">
-      <div class="home-hero">
-        <div class="home-copy">
-          <div class="home-badge">
-            <span class="dot"></span>
-            Valós(abb) becslés • Jelenlegi → Cél • HU átlag HDD
-          </div>
-
-          <h2 class="home-title">
-            Érthető energia-spórolás<br/>
-            <span class="accent">számokkal alátámasztva.</span>
-          </h2>
-
-          <p class="home-lead">
-            Add meg a <b>mostani</b> állapotot és a <b>cél</b> állapotot.
-            A rendszer megmutatja a különbséget: <b>Ft/év</b>, <b>Ft/hó</b>, <b>% javulás</b>,
-            “csak fal / csak födém / csak fűtés” összehasonlítás, és a <b>megtérülés</b>.
+    <section id="viewHome" class="view">
+      <div class="card hero">
+        <div class="heroLeft">
+          <h1>Energia Advisor 3D</h1>
+          <p class="muted">
+            Egyszerű, érthető becslés: hőveszteség (UA + infiltráció + HDD) + “valós” kalibrálás a MOST Ft/év alapján.
           </p>
 
-          <div class="home-cta">
-            <button class="btn btn-primary" id="homeGoCalc">🚀 Kalkulátor indítása</button>
-            <button class="btn btn-ghost" id="homeGoDocs">📘 Tudástár</button>
+          <div class="heroActions">
+            <button id="homeGoCalc" class="btnPrimary">Induljon a kalkulátor</button>
+            <button id="homeGoDocs" class="btnGhost">Nézd meg a tudástárat</button>
           </div>
 
-          <p class="home-note">
-            Döntéstámogatás. Nem hivatalos energetikai tanúsítás.
-          </p>
+          <div class="note">
+            Tipp: állítsd be a MOST költségedet (Ft/év), így a számítás a te valóságodhoz igazodik.
+          </div>
         </div>
 
-        <div class="home-side">
-          <div class="home-card glass">
+        <div class="heroRight">
+          <div class="miniCard">
             <div class="miniTitle">Mit kapsz?</div>
-            <ul class="home-list">
-              <li>✅ MOST vs CÉL költség (Ft/év, Ft/hó)</li>
-              <li>✅ Javulás (%) + kWh/év becslés</li>
-              <li>✅ Prioritás: mi hozza a legtöbb Ft/év megtakarítást</li>
-              <li>✅ “Csak X” összehasonlítás (fal / födém / padló / fűtés)</li>
-              <li>✅ Beruházás + megtérülés (állítható helyi árakkal)</li>
+            <ul class="bullets">
+              <li>Most → Cél költség (Ft/év) + megtakarítás</li>
+              <li>Prioritás: hol nyersz a legtöbbet</li>
+              <li>PRO: hőtérkép MOST / CÉL / KÜLÖNBSÉG</li>
+              <li>Tudástár: alapok, szigetelés, fűtés, hibák</li>
             </ul>
-
-            <div class="chips">
-              <span class="chip">UA + infiltráció</span>
-              <span class="chip">HDD (HU átlag)</span>
-              <span class="chip">gáz / kondenz / hőszivattyú</span>
-            </div>
-          </div>
-
-          <div class="home-card glass">
-            <div class="miniTitle">Mi alapján számol?</div>
-            <div class="home-math">
-              <div><b>H</b> = Σ(U·A) + <b>Hvent</b></div>
-              <div class="muted">Hvent ≈ 0.33 · n · V</div>
-              <div><b>Q</b> ≈ H · HDD · 24 / 1000</div>
-              <div class="muted">… majd kalibrálás a MOST Ft/év alapján</div>
-            </div>
           </div>
         </div>
-
-        <!-- animált fénycsík -->
-        <div class="light-streak"></div>
-        <div class="light-streak streak2"></div>
       </div>
     </section>
 
     <!-- CALC -->
-    <section class="card" id="viewCalc" style="display:none;">
-      <h2 class="title">Energia kalkulátor (Jelenlegi → Cél)</h2>
-      <p class="subtitle">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</p>
+    <section id="viewCalc" class="view" style="display:none;">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionTitle">Kalkulátor</div>
 
-      <div class="grid">
-        <!-- JELENLEGI -->
-        <fieldset>
-          <legend>Jelenlegi állapot</legend>
-
-          <div class="row">
-            <label for="area">Alapterület (m²)</label>
-            <input id="area" type="number" min="20" step="1" value="100">
-          </div>
-
-          <div class="row">
-            <label for="storeys">Szintek száma</label>
-            <select id="storeys">
-              <option value="1" selected>1 szint</option>
-              <option value="2">2 szint</option>
-              <option value="3">3 szint</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="height">Belmagasság (m)</label>
-            <input id="height" type="number" min="2.2" max="3.2" step="0.1" value="2.6">
-          </div>
-
-          <div class="row">
-            <label for="wallType">Falazat típusa</label>
-            <select id="wallType">
-              <option value="brick" selected>Tégla (átlagos régi)</option>
-              <option value="adobe">Vályog (átlagos)</option>
-              <option value="concrete">Beton/panel (átlagos)</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="winRatio">Ablak arány a falfelülethez (%)</label>
-            <input id="winRatio" type="number" min="5" max="35" step="1" value="18">
-          </div>
-
-          <div class="row">
-            <label for="nAir">Légcsere (1/h)</label>
-            <input id="nAir" type="number" min="0.2" max="1.2" step="0.05" value="0.6">
-          </div>
-
-          <div class="row">
-            <label for="wallInsNow">Fal szigetelés (cm)</label>
-            <input id="wallInsNow" type="number" min="0" max="30" step="1" value="0">
-          </div>
-
-          <div class="row">
-            <label for="wallInsMat">Fal szigetelés anyag</label>
-            <select id="wallInsMat">
-              <option value="eps" selected>EPS</option>
-              <option value="rockwool">Kőzetgyapot</option>
-              <option value="xps">XPS</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="roofInsNow">Födém/padlás szigetelés (cm)</label>
-            <input id="roofInsNow" type="number" min="0" max="50" step="1" value="0">
-          </div>
-
-          <div class="row">
-            <label for="roofInsMat">Födém szigetelés anyag</label>
-            <select id="roofInsMat">
-              <option value="rockwool" selected>Kőzetgyapot</option>
-              <option value="eps">EPS</option>
-              <option value="xps">XPS</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="floorInsNow">Padló/aljzat szigetelés (cm)</label>
-            <input id="floorInsNow" type="number" min="0" max="20" step="1" value="0">
-          </div>
-
-          <div class="row">
-            <label for="floorInsMat">Padló szigetelés anyag</label>
-            <select id="floorInsMat">
-              <option value="xps" selected>XPS</option>
-              <option value="eps">EPS</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="heatingNow">Fűtési rendszer</label>
-            <select id="heatingNow">
-              <option value="gas_old" selected>Régi gázkazán</option>
-              <option value="gas_cond">Kondenzációs gázkazán</option>
-              <option value="hp">Hőszivattyú</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="scopNow">Hőszivattyú SCOP (ha HP)</label>
-            <input id="scopNow" type="number" min="2.2" max="5.0" step="0.1" value="3.2">
-          </div>
-
-          <div class="row">
-            <label for="annualCostNow">Éves fűtési költség MOST (Ft/év)</label>
-            <input id="annualCostNow" type="number" min="0" step="10000" value="600000">
-          </div>
-
-          <p class="help">
-            Tipp: ha nem tudod a pontos U-értékeket, nem baj — ez a modell tipikus magyar régi szerkezetből indul,
-            és a megadott szigetelésből számolja a változást.
-          </p>
-        </fieldset>
-
-        <!-- CEL -->
-        <fieldset>
-          <legend>Cél állapot</legend>
-
-          <div class="row">
-            <label for="wallInsTarget">Fal szigetelés CÉL (cm)</label>
-            <input id="wallInsTarget" type="number" min="0" max="30" step="1" value="15">
-          </div>
-
-          <div class="row">
-            <label for="roofInsTarget">Födém/padlás CÉL (cm)</label>
-            <input id="roofInsTarget" type="number" min="0" max="60" step="1" value="25">
-          </div>
-
-          <div class="row">
-            <label for="floorInsTarget">Padló/aljzat CÉL (cm)</label>
-            <input id="floorInsTarget" type="number" min="0" max="20" step="1" value="10">
-          </div>
-
-          <div class="row">
-            <label for="heatingTarget">Fűtési rendszer CÉL</label>
-            <select id="heatingTarget">
-              <option value="gas_old">Régi gázkazán</option>
-              <option value="gas_cond">Kondenzációs gázkazán</option>
-              <option value="hp" selected>Hőszivattyú</option>
-            </select>
-          </div>
-
-          <div class="row">
-            <label for="scopTarget">Hőszivattyú SCOP CÉL (ha HP)</label>
-            <input id="scopTarget" type="number" min="2.2" max="5.0" step="0.1" value="3.6">
-          </div>
-
-          <div class="row">
-            <label for="hdd">HDD (fűtési foknap, HU átlag)</label>
-            <input id="hdd" type="number" min="1800" max="4500" step="50" value="3000">
-          </div>
-
-          <div class="row">
-            <label for="priceGas">Gáz ár (Ft/kWh)</label>
-            <input id="priceGas" type="number" min="10" max="120" step="1" value="40">
-          </div>
-
-          <div class="row">
-            <label for="priceEl">Villany ár (Ft/kWh)</label>
-            <input id="priceEl" type="number" min="20" max="180" step="1" value="70">
-          </div>
-
-          <details>
-            <summary>Haladó: költségek / korrekciók (ajánlott)</summary>
-
-            <div class="row">
-              <label for="bridge">Hőhíd korrekció (%)</label>
-              <input id="bridge" type="number" min="0" max="25" step="1" value="10">
+          <div class="formGrid">
+            <div class="field">
+              <label>Alapterület (m²)</label>
+              <input id="area" type="number" inputmode="numeric" />
+            </div>
+            <div class="field">
+              <label>Szintek száma</label>
+              <select id="storeys">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Beltér magasság (m)</label>
+              <input id="height" type="number" step="0.1" />
             </div>
 
-            <div class="row">
-              <label for="costWallM2">Fal szigetelés fajlagos (Ft/m² @10cm)</label>
-              <input id="costWallM2" type="number" min="5000" step="500" value="18000">
+            <div class="field">
+              <label>Fal típusa</label>
+              <select id="wallType">
+                <option value="brick">Régi tégla</option>
+                <option value="adobe">Vályog</option>
+                <option value="concrete">Panel/beton</option>
+              </select>
             </div>
 
-            <div class="row">
-              <label for="costRoofM2">Födém szigetelés fajlagos (Ft/m² @10cm)</label>
-              <input id="costRoofM2" type="number" min="4000" step="500" value="12000">
+            <div class="field">
+              <label>Ablakarány a falon (%)</label>
+              <input id="winRatio" type="number" />
+            </div>
+            <div class="field">
+              <label>Légcsere (1/h)</label>
+              <input id="nAir" type="number" step="0.1" />
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="splitTitle">MOST (jelenlegi állapot)</div>
+          <div class="formGrid">
+            <div class="field">
+              <label>Fal szigetelés (cm)</label>
+              <input id="wallInsNow" type="number" />
+            </div>
+            <div class="field">
+              <label>Fal anyag</label>
+              <select id="wallInsMat">
+                <option value="eps">EPS</option>
+                <option value="rockwool">Kőzetgyapot</option>
+                <option value="xps">XPS</option>
+              </select>
             </div>
 
-            <div class="row">
-              <label for="costFloorM2">Padló szigetelés fajlagos (Ft/m² @10cm)</label>
-              <input id="costFloorM2" type="number" min="6000" step="500" value="15000">
+            <div class="field">
+              <label>Födém/padlás (cm)</label>
+              <input id="roofInsNow" type="number" />
+            </div>
+            <div class="field">
+              <label>Födém anyag</label>
+              <select id="roofInsMat">
+                <option value="rockwool">Kőzetgyapot</option>
+                <option value="eps">EPS</option>
+                <option value="xps">XPS</option>
+              </select>
             </div>
 
-            <div class="row">
-              <label for="costHeating">Fűtés korszerűsítés (Ft, egyszeri)</label>
-              <input id="costHeating" type="number" min="0" step="50000" value="3500000">
+            <div class="field">
+              <label>Padló/aljzat (cm)</label>
+              <input id="floorInsNow" type="number" />
+            </div>
+            <div class="field">
+              <label>Padló anyag</label>
+              <select id="floorInsMat">
+                <option value="xps">XPS</option>
+                <option value="eps">EPS</option>
+                <option value="rockwool">Kőzetgyapot</option>
+              </select>
             </div>
 
-            <p class="help">
-              Ezek az összegek irányárak. Ha beírod a saját helyi áraiddal, a megtérülés is sokkal valósabb lesz.
-            </p>
+            <div class="field">
+              <label>Fűtés típusa (MOST)</label>
+              <select id="heatingNow">
+                <option value="gas_old">Régi gázkazán</option>
+                <option value="gas_cond">Kondenzációs gázkazán</option>
+                <option value="hp">Hőszivattyú</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>SCOP (ha hőszivattyú)</label>
+              <input id="scopNow" type="number" step="0.1" />
+            </div>
+
+            <div class="field full">
+              <label>Éves fűtési költség MOST (Ft/év)</label>
+              <input id="annualCostNow" type="number" inputmode="numeric" />
+              <div class="hint">Ez a “valós” kalibrálás alapja.</div>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="splitTitle">CÉL (tervezett állapot)</div>
+          <div class="formGrid">
+            <div class="field">
+              <label>Fal szigetelés (cm)</label>
+              <input id="wallInsTarget" type="number" />
+            </div>
+            <div class="field">
+              <label>Födém/padlás (cm)</label>
+              <input id="roofInsTarget" type="number" />
+            </div>
+            <div class="field">
+              <label>Padló/aljzat (cm)</label>
+              <input id="floorInsTarget" type="number" />
+            </div>
+
+            <div class="field">
+              <label>Fűtés típusa (CÉL)</label>
+              <select id="heatingTarget">
+                <option value="gas_old">Régi gázkazán</option>
+                <option value="gas_cond">Kondenzációs gázkazán</option>
+                <option value="hp">Hőszivattyú</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>SCOP (ha hőszivattyú)</label>
+              <input id="scopTarget" type="number" step="0.1" />
+            </div>
+          </div>
+
+          <details class="advanced">
+            <summary>Haladó beállítások</summary>
+            <div class="formGrid">
+              <div class="field">
+                <label>HDD (fűtési foknap)</label>
+                <input id="hdd" type="number" />
+              </div>
+              <div class="field">
+                <label>Gáz ár (Ft/kWh)</label>
+                <input id="priceGas" type="number" />
+              </div>
+              <div class="field">
+                <label>Áram ár (Ft/kWh)</label>
+                <input id="priceEl" type="number" />
+              </div>
+
+              <div class="field">
+                <label>Hőhíd korrekció (%)</label>
+                <input id="bridge" type="number" />
+              </div>
+
+              <div class="field">
+                <label>Fal fajlagos ár (Ft/m² / 10 cm)</label>
+                <input id="costWallM2" type="number" />
+              </div>
+              <div class="field">
+                <label>Födém fajlagos ár (Ft/m² / 10 cm)</label>
+                <input id="costRoofM2" type="number" />
+              </div>
+              <div class="field">
+                <label>Padló fajlagos ár (Ft/m² / 10 cm)</label>
+                <input id="costFloorM2" type="number" />
+              </div>
+              <div class="field full">
+                <label>Fűtéscsere becsült költség (Ft)</label>
+                <input id="costHeating" type="number" />
+              </div>
+            </div>
           </details>
 
-          <div class="btnbar">
-            <button class="btn" id="btnCalcRun">Elemzés</button>
-            <button class="btn" id="btnReset" title="Vissza alapokra">Alapértékek</button>
+          <div class="actions">
+            <button id="btnCalcRun" class="btnPrimary">Elemzés</button>
+            <button id="btnReset" class="btnGhost">Alapértékek</button>
           </div>
+        </div>
 
-          <p class="help">
-            <b>Fontos:</b> A MOST költséget (Ft/év) te adod meg – ezt tekintjük “valós” bázisnak.
-            A modell ebből számol vissza egy “MOST hőigényt”, majd előre számolja a CÉL hőigényt.
-          </p>
-        </fieldset>
-      </div>
-
-      <div class="out" id="resultBox">
-        <div class="sectionTitle">Eredmény</div>
-        <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+        <div class="card">
+          <div id="resultBox">
+            <div class="sectionTitle">Eredmény</div>
+            <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- 3D / HEATMAP -->
-    <section class="card" id="view3d" style="display:none;">
-      <h2 class="title">Profi hőtérkép (MVP)</h2>
-      <p class="subtitle">
-        A hőtérkép a kalkulátor adataiból számol: fal / ablak / födém / padló / légcsere.
-        Válts: <b>MOST</b> • <b>CÉL</b> • <b>KÜLÖNBSÉG</b>.
-      </p>
-
-      <div class="heatbar">
-        <button class="pill active" id="hmModeNow">MOST</button>
-        <button class="pill" id="hmModeTarget">CÉL</button>
-        <button class="pill" id="hmModeDelta">KÜLÖNBSÉG</button>
-        <div class="hmHint">Tipp: módosíts a kalkulátorban, majd gyere vissza ide – automatikusan frissül.</div>
-      </div>
-
-      <div class="heatgrid">
-        <div class="heatCard">
-          <div class="miniTitle">Ház – hőveszteség vizuálisan</div>
-
-          <div class="houseWrap">
-            <div class="legend">
-              <div class="lgRow"><span class="lgSw hot"></span> nagy veszteség</div>
-              <div class="lgRow"><span class="lgSw mid"></span> közepes</div>
-              <div class="lgRow"><span class="lgSw cool"></span> kisebb</div>
-            </div>
-
-            <div class="house">
-              <div class="roof" id="hmRoof"><span>Födém</span></div>
-              <div class="walls">
-                <div class="wall left" id="hmWallL"><span>Fal</span></div>
-                <div class="wall center" id="hmWallC">
-                  <div class="window" id="hmWin"><span>Ablak</span></div>
-                </div>
-                <div class="wall right" id="hmWallR"><span>Fal</span></div>
-              </div>
-              <div class="floor" id="hmFloor"><span>Padló</span></div>
-              <div class="vent" id="hmVent"><span>Légcsere</span></div>
-            </div>
+    <section id="view3d" class="view" style="display:none;">
+      <div class="card">
+        <div class="rowBetween">
+          <div>
+            <div class="sectionTitle">3D nézet (PRO) – hőtérkép</div>
+            <div class="muted">A hőtérkép a kalkulátor adataiból számol: UA + infiltráció + HDD → MOST / CÉL / KÜLÖNBSÉG.</div>
           </div>
 
-          <div class="muted hmSmall">
-            A színezés az egyes elemek <b>H (W/K) hozzájárulásán</b> alapul (UA + Hvent), hőhíd-korrekcióval.
+          <div class="chips">
+            <button id="hmModeNow" class="chip active">MOST</button>
+            <button id="hmModeTarget" class="chip">CÉL</button>
+            <button id="hmModeDelta" class="chip">KÜLÖNBSÉG</button>
           </div>
         </div>
 
-        <div class="heatCard">
-          <div class="miniTitle">Bontás (arány + számok)</div>
-          <div class="hmList" id="hmList"></div>
+        <div class="muted" style="margin-top:10px;">
+          Tipp: módosíts a kalkulátorban, majd gyere vissza ide – automatikusan frissül.
+        </div>
 
-          <div class="hr"></div>
+        <div class="grid2" style="margin-top:14px;">
+          <div class="card inner">
+            <div class="miniTitle">Ház – hőveszteség vizuálisan</div>
 
-          <div class="miniTitle">Gyors értelmezés</div>
-          <div class="muted" id="hmExplain">
-            Válassz módot fent (MOST/CÉL/KÜLÖNBSÉG). A “KÜLÖNBSÉG” azt mutatja, hol csökken a legjobban a veszteség.
+            <div class="hmWrap">
+              <div class="hmLegend">
+                <div class="hmLegendItem"><span class="dot dotRed"></span> nagy veszteség</div>
+                <div class="hmLegendItem"><span class="dot dotYel"></span> közepes</div>
+                <div class="hmLegendItem"><span class="dot dotGrn"></span> kisebb</div>
+              </div>
+
+              <div class="hmHouse">
+                <div id="hmRoof" class="hmBlock roof">Födém</div>
+
+                <div class="hmMid">
+                  <div id="hmWallL" class="hmBlock wall">Fal</div>
+                  <div id="hmWallC" class="hmBlock wall center">
+                    <div id="hmWin" class="hmBlock window">Ablak</div>
+                  </div>
+                  <div id="hmWallR" class="hmBlock wall">Fal</div>
+                </div>
+
+                <div class="hmBottom">
+                  <div id="hmVent" class="hmBlock vent">Légcsere</div>
+                  <div id="hmFloor" class="hmBlock floor">Padló</div>
+                </div>
+              </div>
+
+              <div class="muted hmFoot">
+                A színezés az egyes elemek H (W/K) hozzájárulásán alapul (UA + Hvent), hőhíd-korrekcióval.
+              </div>
+            </div>
           </div>
+
+          <div class="card inner">
+            <div class="miniTitle">Bontás (arány + számok)</div>
+            <div id="hmList" class="hmList"></div>
+            <div class="hr"></div>
+            <div class="miniTitle">Gyors értelmezés</div>
+            <div id="hmExplain" class="muted"></div>
+          </div>
+        </div>
+
+        <div class="footnote">
+          Megjegyzés: döntéstámogatás. A számítások becslések, a valóságban a szerkezetek, légzárás, hőhidak, árak és szokások erősen befolyásolnak.
         </div>
       </div>
     </section>
 
     <!-- DOCS -->
-    <section class="card" id="viewDocs" style="display:none;">
-      <h2 class="title">Tudástár</h2>
-      <p class="subtitle">Rövid, érthető cikkek: tipikus hibák, kérdéslista szakiknak, mire figyelj. <span class="muted">(SEO + bizalom)</span></p>
-
-      <div class="docsSearch glass2">
-        <div class="miniTitle">Keresés (cím + tartalom)</div>
-        <input id="docSearch" class="docsInput" type="text" placeholder="Pl.: hőhíd, légcsere, födém, EPS, megtérülés..." />
-        <div class="docsChips">
-          <button class="pill active" id="docChipAll">Összes</button>
-          <button class="pill" id="docChipBasics">Alapok</button>
-          <button class="pill" id="docChipIns">Szigetelés</button>
-          <button class="pill" id="docChipHeat">Fűtés</button>
-          <button class="pill" id="docChipMist">Tipikus hibák</button>
-          <button class="pill" id="docChipList">Kérdéslista</button>
-        </div>
-        <div class="muted docsTip">Tipp: ezt a Tudástárat később simán át lehet költöztetni külön oldalra / CMS-be, de MVP-nek tökéletes.</div>
-      </div>
-
-      <div class="docsGrid">
-        <div class="docsLeft glass2">
-          <div class="miniTitle">Cikkek</div>
-          <div class="muted" style="margin-top:4px;"><span id="docCount">0</span> találat</div>
-          <div class="docsList" id="docList"></div>
+    <section id="viewDocs" class="view" style="display:none;">
+      <div class="card">
+        <div class="rowBetween">
+          <div class="sectionTitle">Tudástár</div>
+          <div class="muted">Találatok: <b id="docCount">0</b></div>
         </div>
 
-        <div class="docsRight glass2">
-          <div id="docView">
-            <div class="miniTitle">Válassz egy cikket balról</div>
-            <div class="muted" style="margin-top:8px;">
-              A jobb oldalon megjelenik a cikk tartalma + egy “gyors emlékeztető”.
-            </div>
+        <div class="docsTop">
+          <input id="docSearch" class="search" type="text" placeholder="Keresés (pl. HDD, hőhíd, légcsere, fal...)" />
+
+          <div class="chips docsChips">
+            <button id="docChipAll" class="chip active">Összes</button>
+            <button id="docChipBasics" class="chip">Alapok</button>
+            <button id="docChipIns" class="chip">Szigetelés</button>
+            <button id="docChipHeat" class="chip">Fűtés</button>
+            <button id="docChipMist" class="chip">Tipikus hibák</button>
+            <button id="docChipList" class="chip">Kérdéslista</button>
           </div>
+        </div>
+
+        <div class="docsGrid">
+          <div id="docList" class="docList"></div>
+          <div id="docView" class="docView"></div>
         </div>
       </div>
     </section>
-
   </main>
 
-  <div class="foot">
-    Megjegyzés: döntéstámogatás. A számítások becslések, a valóságban a szerkezetek, légzárás, hőhidak, árak és szokások erősen befolyásolnak.
-  </div>
-
-  <script src="./main.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>
