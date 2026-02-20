@@ -8,7 +8,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
 
-  // NAV
+  // ---------- NAV + Views ----------
   const btnHome = $("btnHome");
   const btnCalc = $("btnCalc");
   const btn3d = $("btn3d");
@@ -40,32 +40,19 @@
     if (which === "3d") setActive(btn3d);
     if (which === "docs") setActive(btnDocs);
 
-    // frissítések
     if (which === "docs") renderDocs();
     if (which === "3d") updateHeatmap();
 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  btnHome?.addEventListener("click", () => {
-    location.hash = "#home";
-    showView("home");
-  });
-  btnCalc?.addEventListener("click", () => {
-    location.hash = "#calc";
-    showView("calc");
-  });
-  btn3d?.addEventListener("click", () => {
-    location.hash = "#3d";
-    showView("3d");
-  });
-  btnDocs?.addEventListener("click", () => {
-    location.hash = "#docs";
-    showView("docs");
-  });
+  btnHome?.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
+  btnCalc?.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  btn3d?.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
+  btnDocs?.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
-  if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
-  if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
+  homeGoCalc?.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  homeGoDocs?.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
   function initByHash() {
     const h = (location.hash || "#home").replace("#", "");
@@ -109,27 +96,23 @@
   }
 
   // ---------- Material lambdas (W/mK) ----------
-  const LAMBDA = {
-    eps: 0.037,
-    rockwool: 0.039,
-    xps: 0.034
-  };
+  const LAMBDA = { eps: 0.037, rockwool: 0.039, xps: 0.034 };
 
   // Base U-values (W/m²K) for "régi" szerkezetek (tipikus közelítés)
   const U_BASE = {
-    brick: 1.25,     // régi tégla
-    adobe: 1.10,     // vályog
-    concrete: 1.60,  // panel/beton
-    roof: 1.60,      // födém/padlás szig nélkül
-    floor: 1.10,     // aljzat/padló szig nélkül
-    window: 2.60     // átlag régi/gyenge ablak
+    brick: 1.25,
+    adobe: 1.10,
+    concrete: 1.60,
+    roof: 1.60,
+    floor: 1.10,
+    window: 2.60
   };
 
-  // fűtés hatásfok / COP
+  // Fűtés hatásfok / COP
   const HEAT = {
     gas_old: { name: "Régi gázkazán", eff: 0.75 },
     gas_cond: { name: "Kondenzációs gázkazán", eff: 0.92 },
-    hp: { name: "Hőszivattyú", eff: null } // COP/SCOP adja
+    hp: { name: "Hőszivattyú", eff: null }
   };
 
   function uWithInsulation(uBase, thicknessCm, lambda) {
@@ -155,12 +138,12 @@
   }
 
   function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct) {
-    const H_wall = (Uwall * Awall);
-    const H_win  = (Uwin * Awin);
-    const H_roof = (Uroof * Aroof);
-    const H_floor= (Ufloor * Afloor);
+    const H_wall = Uwall * Awall;
+    const H_win = Uwin * Awin;
+    const H_roof = Uroof * Aroof;
+    const H_floor = Ufloor * Afloor;
     const Htrans = H_wall + H_win + H_roof + H_floor;
-    const Hvent  = 0.33 * nAir * volume; // W/K
+    const Hvent = 0.33 * nAir * volume; // W/K
     const bridge = 1 + (bridgePct / 100);
 
     const parts = {
@@ -170,6 +153,7 @@
       floor: H_floor * bridge,
       vent: Hvent * bridge
     };
+
     const H = (Htrans + Hvent) * bridge;
 
     return { H, Htrans: Htrans * bridge, Hvent: Hvent * bridge, parts, bridge };
@@ -185,7 +169,7 @@
       const elKwh = QkWh / cop;
       return elKwh * priceEl;
     } else {
-      const eff = HEAT[heatingType].eff;
+      const eff = HEAT[heatingType]?.eff ?? 0.85;
       const gasKwh = QkWh / eff;
       return gasKwh * priceGas;
     }
@@ -198,7 +182,7 @@
       const elKwh = costFt / Math.max(priceEl, 1e-6);
       return elKwh * cop;
     } else {
-      const eff = HEAT[heatingType].eff;
+      const eff = HEAT[heatingType]?.eff ?? 0.85;
       const gasKwh = costFt / Math.max(priceGas, 1e-6);
       return gasKwh * eff;
     }
@@ -251,12 +235,14 @@
     wallType: "brick",
     winRatio: 18,
     nAir: 0.6,
+
     wallInsNow: 0,
     wallInsMat: "eps",
     roofInsNow: 0,
     roofInsMat: "rockwool",
     floorInsNow: 0,
     floorInsMat: "xps",
+
     heatingNow: "gas_old",
     scopNow: 3.2,
     annualCostNow: 600000,
@@ -266,11 +252,13 @@
     floorInsTarget: 10,
     heatingTarget: "hp",
     scopTarget: 3.6,
+
     hdd: 3000,
     priceGas: 40,
     priceEl: 70,
 
     bridge: 10,
+
     costWallM2: 18000,
     costRoofM2: 12000,
     costFloorM2: 15000,
@@ -278,79 +266,80 @@
   };
 
   function setDefaults() {
-    $("area").value = DEFAULTS.area;
-    $("storeys").value = String(DEFAULTS.storeys);
-    $("height").value = DEFAULTS.height;
-    $("wallType").value = DEFAULTS.wallType;
-    $("winRatio").value = DEFAULTS.winRatio;
-    $("nAir").value = DEFAULTS.nAir;
+    $("area") && ($("area").value = DEFAULTS.area);
+    $("storeys") && ($("storeys").value = String(DEFAULTS.storeys));
+    $("height") && ($("height").value = DEFAULTS.height);
+    $("wallType") && ($("wallType").value = DEFAULTS.wallType);
+    $("winRatio") && ($("winRatio").value = DEFAULTS.winRatio);
+    $("nAir") && ($("nAir").value = DEFAULTS.nAir);
 
-    $("wallInsNow").value = DEFAULTS.wallInsNow;
-    $("wallInsMat").value = DEFAULTS.wallInsMat;
-    $("roofInsNow").value = DEFAULTS.roofInsNow;
-    $("roofInsMat").value = DEFAULTS.roofInsMat;
-    $("floorInsNow").value = DEFAULTS.floorInsNow;
-    $("floorInsMat").value = DEFAULTS.floorInsMat;
+    $("wallInsNow") && ($("wallInsNow").value = DEFAULTS.wallInsNow);
+    $("wallInsMat") && ($("wallInsMat").value = DEFAULTS.wallInsMat);
+    $("roofInsNow") && ($("roofInsNow").value = DEFAULTS.roofInsNow);
+    $("roofInsMat") && ($("roofInsMat").value = DEFAULTS.roofInsMat);
+    $("floorInsNow") && ($("floorInsNow").value = DEFAULTS.floorInsNow);
+    $("floorInsMat") && ($("floorInsMat").value = DEFAULTS.floorInsMat);
 
-    $("heatingNow").value = DEFAULTS.heatingNow;
-    $("scopNow").value = DEFAULTS.scopNow;
-    $("annualCostNow").value = DEFAULTS.annualCostNow;
+    $("heatingNow") && ($("heatingNow").value = DEFAULTS.heatingNow);
+    $("scopNow") && ($("scopNow").value = DEFAULTS.scopNow);
+    $("annualCostNow") && ($("annualCostNow").value = DEFAULTS.annualCostNow);
 
-    $("wallInsTarget").value = DEFAULTS.wallInsTarget;
-    $("roofInsTarget").value = DEFAULTS.roofInsTarget;
-    $("floorInsTarget").value = DEFAULTS.floorInsTarget;
-    $("heatingTarget").value = DEFAULTS.heatingTarget;
-    $("scopTarget").value = DEFAULTS.scopTarget;
+    $("wallInsTarget") && ($("wallInsTarget").value = DEFAULTS.wallInsTarget);
+    $("roofInsTarget") && ($("roofInsTarget").value = DEFAULTS.roofInsTarget);
+    $("floorInsTarget") && ($("floorInsTarget").value = DEFAULTS.floorInsTarget);
+    $("heatingTarget") && ($("heatingTarget").value = DEFAULTS.heatingTarget);
+    $("scopTarget") && ($("scopTarget").value = DEFAULTS.scopTarget);
 
-    $("hdd").value = DEFAULTS.hdd;
-    $("priceGas").value = DEFAULTS.priceGas;
-    $("priceEl").value = DEFAULTS.priceEl;
+    $("hdd") && ($("hdd").value = DEFAULTS.hdd);
+    $("priceGas") && ($("priceGas").value = DEFAULTS.priceGas);
+    $("priceEl") && ($("priceEl").value = DEFAULTS.priceEl);
 
-    $("bridge").value = DEFAULTS.bridge;
-    $("costWallM2").value = DEFAULTS.costWallM2;
-    $("costRoofM2").value = DEFAULTS.costRoofM2;
-    $("costFloorM2").value = DEFAULTS.costFloorM2;
-    $("costHeating").value = DEFAULTS.costHeating;
+    $("bridge") && ($("bridge").value = DEFAULTS.bridge);
+
+    $("costWallM2") && ($("costWallM2").value = DEFAULTS.costWallM2);
+    $("costRoofM2") && ($("costRoofM2").value = DEFAULTS.costRoofM2);
+    $("costFloorM2") && ($("costFloorM2").value = DEFAULTS.costFloorM2);
+    $("costHeating") && ($("costHeating").value = DEFAULTS.costHeating);
   }
 
   // ---------- Core calc ----------
   function readInputs() {
-    const area = clamp(num($("area").value, 100), 20, 1000);
-    const storeys = clamp(num($("storeys").value, 1), 1, 3);
-    const height = clamp(num($("height").value, 2.6), 2.2, 3.2);
-    const wallType = $("wallType").value;
+    const area = clamp(num($("area")?.value, 100), 20, 1000);
+    const storeys = clamp(num($("storeys")?.value, 1), 1, 3);
+    const height = clamp(num($("height")?.value, 2.6), 2.2, 3.2);
 
-    const winRatio = clamp(num($("winRatio").value, 18), 5, 35);
-    const nAir = clamp(num($("nAir").value, 0.6), 0.2, 1.2);
+    const wallType = $("wallType")?.value || "brick";
+    const winRatio = clamp(num($("winRatio")?.value, 18), 5, 35);
+    const nAir = clamp(num($("nAir")?.value, 0.6), 0.2, 1.2);
 
-    const wallInsNow = clamp(num($("wallInsNow").value, 0), 0, 30);
-    const wallInsMat = $("wallInsMat").value;
-    const roofInsNow = clamp(num($("roofInsNow").value, 0), 0, 60);
-    const roofInsMat = $("roofInsMat").value;
-    const floorInsNow = clamp(num($("floorInsNow").value, 0), 0, 20);
-    const floorInsMat = $("floorInsMat").value;
+    const wallInsNow = clamp(num($("wallInsNow")?.value, 0), 0, 30);
+    const wallInsMat = $("wallInsMat")?.value || "eps";
+    const roofInsNow = clamp(num($("roofInsNow")?.value, 0), 0, 60);
+    const roofInsMat = $("roofInsMat")?.value || "rockwool";
+    const floorInsNow = clamp(num($("floorInsNow")?.value, 0), 0, 20);
+    const floorInsMat = $("floorInsMat")?.value || "xps";
 
-    const heatingNow = $("heatingNow").value;
-    const scopNow = clamp(num($("scopNow").value, 3.2), 2.2, 5.5);
-    const annualCostNow = Math.max(0, num($("annualCostNow").value, 0));
+    const heatingNow = $("heatingNow")?.value || "gas_old";
+    const scopNow = clamp(num($("scopNow")?.value, 3.2), 2.2, 5.5);
+    const annualCostNow = Math.max(0, num($("annualCostNow")?.value, 0));
 
-    const wallInsTarget = clamp(num($("wallInsTarget").value, 15), 0, 30);
-    const roofInsTarget = clamp(num($("roofInsTarget").value, 25), 0, 60);
-    const floorInsTarget = clamp(num($("floorInsTarget").value, 10), 0, 20);
+    const wallInsTarget = clamp(num($("wallInsTarget")?.value, 15), 0, 30);
+    const roofInsTarget = clamp(num($("roofInsTarget")?.value, 25), 0, 60);
+    const floorInsTarget = clamp(num($("floorInsTarget")?.value, 10), 0, 20);
 
-    const heatingTarget = $("heatingTarget").value;
-    const scopTarget = clamp(num($("scopTarget").value, 3.6), 2.2, 5.5);
+    const heatingTarget = $("heatingTarget")?.value || "hp";
+    const scopTarget = clamp(num($("scopTarget")?.value, 3.6), 2.2, 5.5);
 
-    const hdd = clamp(num($("hdd").value, 3000), 1800, 4500);
-    const priceGas = clamp(num($("priceGas").value, 40), 10, 120);
-    const priceEl = clamp(num($("priceEl").value, 70), 20, 180);
+    const hdd = clamp(num($("hdd")?.value, 3000), 1800, 4500);
+    const priceGas = clamp(num($("priceGas")?.value, 40), 10, 120);
+    const priceEl = clamp(num($("priceEl")?.value, 70), 20, 180);
 
-    const bridge = clamp(num($("bridge").value, 10), 0, 25);
+    const bridge = clamp(num($("bridge")?.value, 10), 0, 25);
 
-    const costWallM2 = Math.max(0, num($("costWallM2").value, 18000));
-    const costRoofM2 = Math.max(0, num($("costRoofM2").value, 12000));
-    const costFloorM2 = Math.max(0, num($("costFloorM2").value, 15000));
-    const costHeating = Math.max(0, num($("costHeating").value, 3500000));
+    const costWallM2 = Math.max(0, num($("costWallM2")?.value, 18000));
+    const costRoofM2 = Math.max(0, num($("costRoofM2")?.value, 12000));
+    const costFloorM2 = Math.max(0, num($("costFloorM2")?.value, 15000));
+    const costHeating = Math.max(0, num($("costHeating")?.value, 3500000));
 
     return {
       area, storeys, height, wallType,
@@ -404,8 +393,10 @@
       floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
     });
 
+    // modell Q
     const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
 
+    // "valós" Q a MOST költségből visszaszámolva
     const Q_real_now = heatDemandFromCost(
       x.annualCostNow,
       x.heatingNow,
@@ -414,11 +405,14 @@
       x.scopNow
     );
 
+    // kalibráció
     const calib = (Q_model_now > 0) ? (Q_real_now / Q_model_now) : 1;
 
+    // cél Q
     const Q_model_target = annualHeatDemandKWh(targetScenario.H.H, x.hdd);
     const Q_real_target = Q_model_target * calib;
 
+    // költségek
     const costNow = x.annualCostNow;
     const costTarget = costFromHeatDemand(Q_real_target, x.heatingTarget, x.priceGas, x.priceEl, x.scopTarget);
 
@@ -486,10 +480,10 @@
       <div class="out" style="margin-top:10px;">
         <div class="sectionTitle">MOST -> CÉL</div>
         <ul>
-          <li><b>Fal:</b> ${x.wallInsNow} cm -> ${x.wallInsTarget} cm (${x.wallInsMat.toUpperCase()})</li>
-          <li><b>Födém/padlás:</b> ${x.roofInsNow} cm -> ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
-          <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm -> ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
-          <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} -> ${HEAT[x.heatingTarget].name}</li>
+          <li><b>Fal:</b> ${x.wallInsNow} cm -> ${x.wallInsTarget} cm (${String(x.wallInsMat).toUpperCase()})</li>
+          <li><b>Födém/padlás:</b> ${x.roofInsNow} cm -> ${x.roofInsTarget} cm (${String(x.roofInsMat).toUpperCase()})</li>
+          <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm -> ${x.floorInsTarget} cm (${String(x.floorInsMat).toUpperCase()})</li>
+          <li><b>Fűtés:</b> ${HEAT[x.heatingNow]?.name || x.heatingNow} -> ${HEAT[x.heatingTarget]?.name || x.heatingTarget}</li>
           <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
         </ul>
       </div>
@@ -501,7 +495,7 @@
           <b>CÉL (Ft/év):</b> ${fmtFt(costTarget)} <span class="muted">~ ${fmtFtShort(costTarget/12)} Ft/hó</span><br/>
           <div class="hr"></div>
           <b>Különbség:</b> ${fmtFt(savingYear)} <span class="muted">~ ${fmtFtShort(savingMonth)} Ft/hó</span><br/>
-          <b>Javulás (hőigény):</b> ${fmtPct(improve*100)}<br/>
+          <b>Javulás (hőigény):</b> ${fmtPct(improve * 100)}<br/>
           <span class="muted">Magyarázat: a "MOST" Ft/év értékből visszaszámoljuk a MOST hőigényt, majd ugyanazzal a kalibrációval számoljuk a CÉL hőigényt.</span>
         </div>
       </div>
@@ -535,12 +529,11 @@
           <li><b>Padló:</b> ${fmtFt(inv.floorCost)} -> megtérülés: <b>${fmtYears(pbFloor)}</b></li>
           <li><b>Fűtés:</b> ${fmtFt(inv.heatCost)} -> megtérülés: <b>${fmtYears(pbHeat)}</b> <span class="muted">(csak ha csere van)</span></li>
         </ul>
-        <div class="muted">A fajlagos árak a "Haladó" részben állíthatók. A megtérülés a MOST->CÉL különbségen és a te áraiddal számol.</div>
+        <div class="muted">A fajlagos árak a "Haladó" részben állíthatók. A megtérülés a MOST -> CÉL különbségen és a te áraiddal számol.</div>
       </div>
 
       <details>
         <summary>Technikai számok (ellenőrzéshez)</summary>
-
         <div class="out" style="margin-top:10px;">
           <div class="sectionTitle">Felületek (becslés)</div>
           <div class="muted">
@@ -570,12 +563,11 @@
 
     renderResult(html);
 
-    // ha épp 3D nézeten van, frissüljön
     if ((location.hash || "").includes("3d")) updateHeatmap();
   }
 
-  // events
   btnRun?.addEventListener("click", calcAll);
+
   btnReset?.addEventListener("click", () => {
     setDefaults();
     renderResult(`
@@ -585,7 +577,6 @@
     if ((location.hash || "").includes("3d")) updateHeatmap();
   });
 
-  // init defaults
   setDefaults();
 
   // ---------- TUDÁSTÁR ----------
@@ -610,10 +601,10 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
       tags: ["légcsere", "infiltráció"],
       title: "Légcsere (infiltráció): a láthatatlan pénzégető",
       body: `
-A ház nem csak falon keresztül veszít hőt: a részeken, nyílászárókon, résekben <b>ki-be áramlik a levegő</b>.
+A ház nem csak falon keresztül veszít hőt: a réseken, nyílászárókon <b>ki-be áramlik a levegő</b>.
 Ez sokszor nagyobb tétel, mint gondolnád.<br/><br/>
 <b>Tipikus jelek:</b> huzat, hideg padló, penész sarkokban, gyors kihűlés.<br/><br/>
-<b>Mit tehetsz?</b> Nyílászáró beállítás/tömítés, légzárás, padlásfeljáró tömítése, kémény/áttörések rendbetétele.
+<b>Mit tehetsz?</b> Tömítések, légzárás, padlásfeljáró tömítése, áttörések rendbetétele.
       `.trim()
     },
     {
@@ -637,7 +628,7 @@ A meleg levegő felfelé száll, ezért a födém/padlás felé gyakran óriási
       body: `
 A fal U-értéke a szigeteléssel látványosan javul, de nem lineárisan.
 5 cm már segít, de 12-15 cm gyakran sokkal jobb kompromisszum.<br/><br/>
-<b>Fontos:</b> ne csak vastagság legyen: lábazat, hőhíd, dübelezés, hálózás, csomópontok.
+<b>Fontos:</b> lábazat, hőhíd, csomópontok ugyanúgy számítanak.
       `.trim()
     },
     {
@@ -659,7 +650,7 @@ Megtérülésben vegyes: ha nagy a padló veszteség (pl. alápincézett, hideg 
       title: "Régi gázkazán vs kondenz vs hőszivattyú: miért változik a matek?",
       body: `
 Nem ugyanaz, hogy a hőigényt milyen hatásfokkal állítod elő.
-Régi kazánnál rosszabb a hasznosítás, kondenznál jobb, hőszivattyúnál pedig a COP/SCOP számít.<br/><br/>
+Régi kazánnál rosszabb, kondenznál jobb, hőszivattyúnál a COP/SCOP számít.<br/><br/>
 <b>Tipp:</b> előbb szigetelés/légzárás, utána fűtéscsere - így kisebb gép is elég lehet.
       `.trim()
     },
@@ -670,7 +661,7 @@ Régi kazánnál rosszabb a hasznosítás, kondenznál jobb, hőszivattyúnál p
       tags: ["hőhíd", "penész"],
       title: "Hőhidak: a leggyakoribb 'nem értem miért penészedik' ok",
       body: `
-A hőhíd olyan pont, ahol a hő könnyebben elszökik (koszorú, áthidaló, lábazat, erkélycsatlakozás).
+A hőhíd olyan pont, ahol a hő könnyebben elszökik (koszorú, áthidaló, lábazat).
 Ott hidegebb a felület -> kicsapódik a pára -> penész.<br/><br/>
 Ezért fontos a csomóponti gondolkodás, nem csak a "cm".
       `.trim()
@@ -683,11 +674,11 @@ Ezért fontos a csomóponti gondolkodás, nem csak a "cm".
       title: "Kérdéslista szakiknak: mit kérdezz, hogy ne bukj pénzt",
       body: `
 <b>Gyors lista:</b><br/>
-* Milyen rétegrendet javasolsz és miért?<br/>
-* Lábazat, koszorú, nyílászáró körül hogyan oldod meg?<br/>
-* Páratechnika: kell-e párafék/páraáteresztés?<br/>
-* Garancia, referencia, határidő?<br/>
-* Pontos anyaglista + munkadíj bontás?<br/><br/>
+• Milyen rétegrendet javasolsz és miért?<br/>
+• Lábazat/koszorú/nyílászáró körül hogyan oldod meg?<br/>
+• Páratechnika: kell-e párafék/páraáteresztés?<br/>
+• Garancia, referencia, határidő?<br/>
+• Pontos anyaglista + munkadíj bontás?<br/><br/>
 Ezekkel elkerülhető sok "jó lesz az úgy" típusú bukás.
       `.trim()
     }
@@ -801,13 +792,44 @@ Ezekkel elkerülhető sok "jó lesz az úgy" típusú bukás.
   hmModeTarget?.addEventListener("click", () => { hmMode = "target"; setHmActive(hmModeTarget); updateHeatmap(); });
   hmModeDelta?.addEventListener("click", () => { hmMode = "delta"; setHmActive(hmModeDelta); updateHeatmap(); });
 
+  // HŐKAMERA-SZERŰ SZÍNEZÉS (nem lesz "mind zöld")
   function colorForValue01(x) {
-    // 0..1 => zöld -> sárga -> piros
-    const v = clamp(x, 0, 1);
-    const r = Math.round(90 + v * (255 - 90));
-    const g = Math.round(220 - v * (220 - 90));
-    const b = Math.round(170 - v * (170 - 110));
-    return `rgba(${r},${g},${b},0.55)`;
+    let v = clamp(x, 0, 1);
+
+    // A tipikus arányok 0.05–0.40 körül vannak -> erre húzzuk szét a kontrasztot
+    v = (v - 0.05) / 0.35;      // 0.05 -> 0, 0.40 -> 1
+    v = clamp(v, 0, 1);
+
+    // Gamma: kiemeli a középtartományt
+    v = Math.pow(v, 0.70);
+
+    // Thermal palette: blue -> cyan -> green -> yellow -> orange -> red
+    const stops = [
+      { t: 0.00, c: [  0,  60, 255] },
+      { t: 0.20, c: [  0, 210, 255] },
+      { t: 0.40, c: [  0, 255, 120] },
+      { t: 0.60, c: [255, 235,   0] },
+      { t: 0.80, c: [255, 120,   0] },
+      { t: 1.00, c: [255,   0,   0] }
+    ];
+
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    let a = stops[0], b = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (v >= stops[i].t && v <= stops[i + 1].t) {
+        a = stops[i];
+        b = stops[i + 1];
+        break;
+      }
+    }
+
+    const tt = (v - a.t) / Math.max(1e-9, (b.t - a.t));
+    const r = Math.round(lerp(a.c[0], b.c[0], tt));
+    const g = Math.round(lerp(a.c[1], b.c[1], tt));
+    const bl = Math.round(lerp(a.c[2], b.c[2], tt));
+
+    return `rgba(${r},${g},${bl},0.78)`;
   }
 
   function setBlock(id, v01) {
@@ -858,27 +880,26 @@ Ezekkel elkerülhető sok "jó lesz az úgy" típusú bukás.
       parts = partsTar;
       explain = "CÉL: megmutatja, hogy a cél állapotban hol marad veszteség (még szigetelés után is).";
     } else {
-      // delta: csökkenés = now - target
-      keys.forEach((k) => (parts[k] = Math.max(0, partsNow[k] - partsTar[k])));
+      keys.forEach((k) => { parts[k] = Math.max(0, (partsNow[k] || 0) - (partsTar[k] || 0)); });
       explain = "KÜLÖNBSÉG: azt mutatja, hol csökken a legjobban a veszteség MOST -> CÉL között. Ez a 'hol nyersz a legtöbbet' nézet.";
     }
 
     const total = keys.reduce((s, k) => s + (parts[k] || 0), 0) || 1;
 
     const ratios = {};
-    keys.forEach((k) => (ratios[k] = (parts[k] || 0) / total));
+    keys.forEach((k) => { ratios[k] = (parts[k] || 0) / total; });
 
-    // vizuális elemek
+    // Vizuális elemek
     setBlock("hmRoof", ratios.roof);
     setBlock("hmFloor", ratios.floor);
     setBlock("hmVent", ratios.vent);
 
-    // fal 3 részre bontva (azonos szín)
+    // Fal 3 részre bontva
     setBlock("hmWallL", ratios.wall);
     setBlock("hmWallC", ratios.wall);
     setBlock("hmWallR", ratios.wall);
 
-    // ablak külön
+    // Ablak
     setBlock("hmWin", ratios.window);
 
     const labelMap = {
@@ -889,7 +910,6 @@ Ezekkel elkerülhető sok "jó lesz az úgy" típusú bukás.
       vent: "Légcsere"
     };
 
-    // lista render
     const rows = keys
       .map((k) => ({
         k,
@@ -899,9 +919,7 @@ Ezekkel elkerülhető sok "jó lesz az úgy" típusú bukás.
       }))
       .sort((a, b) => b.val - a.val);
 
-    list.innerHTML = rows
-      .map(
-        (r) => `
+    list.innerHTML = rows.map((r) => `
       <div class="hmRow">
         <div class="hmTop">
           <div>${r.label}</div>
@@ -910,9 +928,7 @@ Ezekkel elkerülhető sok "jó lesz az úgy" típusú bukás.
         <div class="hmBar"><div class="hmFill" style="width:${Math.round(r.pct)}%"></div></div>
         <div class="hmMeta">H hozzájárulás: <b>${r.val.toFixed(0)} W/K</b></div>
       </div>
-    `
-      )
-      .join("");
+    `).join("");
 
     const ex = $("hmExplain");
     if (ex) ex.textContent = explain;
