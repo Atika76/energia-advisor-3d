@@ -794,19 +794,43 @@ Ezekkel elkerülhető sok “jó lesz az úgy” típusú bukás.
   hmModeTarget?.addEventListener("click", () => { hmMode = "target"; setHmActive(hmModeTarget); updateHeatmap(); });
   hmModeDelta?.addEventListener("click", () => { hmMode = "delta"; setHmActive(hmModeDelta); updateHeatmap(); });
 
+  // Erősebb, kontrasztosabb színskála (HSL): zöld -> sárga -> piros
   function colorForValue01(x){
-    // 0..1 => zöld -> sárga -> piros
     const v = clamp(x, 0, 1);
-    const r = Math.round(90 + v * (255 - 90));
-    const g = Math.round(220 - v * (220 - 90));
-    const b = Math.round(170 - v * (170 - 110));
-    return `rgba(${r},${g},${b},0.55)`;
+    const hue = (1 - v) * 140;  // 140=zöld, 0=piros
+    const sat = 85;
+    const light = 45;
+    const alpha = 0.85;
+    return `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
   }
 
   function setBlock(id, v01){
     const el = $(id);
     if (!el) return;
     el.style.background = colorForValue01(v01);
+  }
+
+  // Csak a SZÍNEZÉSHEZ: normalizálás 0..1-re, hogy ne legyen "minden zöld"
+  function normalizeForViz(ratios, keys){
+    const vals = keys.map(k => ratios[k] ?? 0);
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+
+    if (Math.abs(maxV - minV) < 1e-9) {
+      const out = {};
+      keys.forEach(k => out[k] = 0.5);
+      return out;
+    }
+
+    // gamma < 1 => erősebb kontraszt, a közepes értékek is jobban látszanak
+    const gamma = 0.65;
+    const out = {};
+    keys.forEach(k => {
+      const v = (ratios[k] ?? 0);
+      const n = (v - minV) / (maxV - minV);
+      out[k] = Math.pow(clamp(n, 0, 1), gamma);
+    });
+    return out;
   }
 
   function scenarioFromInputs(which){
@@ -861,18 +885,21 @@ Ezekkel elkerülhető sok “jó lesz az úgy” típusú bukás.
     const ratios = {};
     keys.forEach(k => ratios[k] = (parts[k]||0) / total);
 
-    // vizuális elemek
-    setBlock("hmRoof", ratios.roof);
-    setBlock("hmFloor", ratios.floor);
-    setBlock("hmVent", ratios.vent);
+    // VIZUÁLIS normalizálás CSAK a SZÍNEZÉSHEZ (a listában marad a valós %)
+    const viz = normalizeForViz(ratios, keys);
+
+    // vizuális elemek (színekhez a normalizált érték)
+    setBlock("hmRoof", viz.roof);
+    setBlock("hmFloor", viz.floor);
+    setBlock("hmVent", viz.vent);
 
     // fal 3 részre bontva (azonos szín)
-    setBlock("hmWallL", ratios.wall);
-    setBlock("hmWallC", ratios.wall);
-    setBlock("hmWallR", ratios.wall);
+    setBlock("hmWallL", viz.wall);
+    setBlock("hmWallC", viz.wall);
+    setBlock("hmWallR", viz.wall);
 
     // ablak külön
-    setBlock("hmWin", ratios.window);
+    setBlock("hmWin", viz.window);
 
     const labelMap = {
       roof: "Födém",
@@ -882,7 +909,7 @@ Ezekkel elkerülhető sok “jó lesz az úgy” típusú bukás.
       vent: "Légcsere"
     };
 
-    // lista render
+    // lista render (valós arányok)
     const rows = keys
       .map(k => ({
         k,
