@@ -5,204 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Energia Advisor 3D – Valós kalkulátor (C)</title>
 
-  <!-- Ha van saját style.css-ed, hagyd meg (nem kötelező) -->
-  <!-- <link rel="stylesheet" href="./style.css" /> -->
-
-  <style>
-    :root{
-      --bg1:#0b1220;
-      --bg2:#111a2c;
-      --card: rgba(255,255,255,.06);
-      --card2: rgba(255,255,255,.045);
-      --line: rgba(255,255,255,.12);
-      --text: rgba(255,255,255,.92);
-      --muted: rgba(255,255,255,.72);
-      --muted2: rgba(255,255,255,.58);
-      --btn: rgba(84,110,255,.25);
-      --btn2: rgba(84,110,255,.35);
-      --ok: rgba(90,220,170,.9);
-      --warn: rgba(255,190,90,.9);
-      --bad: rgba(255,110,120,.9);
-      --shadow: 0 18px 55px rgba(0,0,0,.45);
-      --radius: 22px;
-      --radius2: 14px;
-      --pad: 18px;
-      --pad2: 14px;
-      --max: 1180px;
-      font-synthesis-weight:none;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
-      background: radial-gradient(1200px 800px at 15% 20%, rgba(90,210,255,.18), transparent 55%),
-                  radial-gradient(1200px 900px at 85% 25%, rgba(140,90,255,.18), transparent 55%),
-                  linear-gradient(180deg, var(--bg1), var(--bg2));
-      color:var(--text);
-      min-height:100vh;
-    }
-    .topbar{
-      position:sticky; top:0; z-index:9;
-      backdrop-filter: blur(14px);
-      background: linear-gradient(180deg, rgba(12,18,32,.86), rgba(12,18,32,.60));
-      border-bottom: 1px solid rgba(255,255,255,.08);
-    }
-    .topbar-inner{
-      max-width: var(--max);
-      margin: 0 auto;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding: 14px 16px;
-      gap: 14px;
-    }
-    .brand{display:flex; align-items:center; gap:12px; min-width: 260px;}
-    .logo{
-      width:44px; height:44px;
-      border-radius: 14px;
-      display:grid; place-items:center;
-      background: linear-gradient(145deg, rgba(90,190,255,.85), rgba(120,90,255,.85));
-      box-shadow: var(--shadow);
-      font-weight:800;
-      letter-spacing:.5px;
-    }
-    .brand h1{margin:0; font-size:16px; line-height:1.1}
-    .brand small{display:block; color:var(--muted2); font-weight:500; margin-top:4px}
-    .nav{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end}
-    .pill{
-      padding:10px 14px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.06);
-      color: var(--text);
-      cursor:pointer;
-      font-weight:650;
-      transition: .15s ease;
-      user-select:none;
-    }
-    .pill:hover{transform: translateY(-1px); background: rgba(255,255,255,.08)}
-    .pill.active{border-color: rgba(90,190,255,.45); box-shadow: 0 0 0 3px rgba(90,190,255,.15) inset;}
-    .wrap{max-width: var(--max); margin: 26px auto; padding: 0 16px;}
-    .card{
-      border:1px solid rgba(255,255,255,.10);
-      background: var(--card);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: var(--pad);
-    }
-    .title{
-      font-size: 26px;
-      margin: 0 0 8px;
-      letter-spacing:.2px;
-    }
-    .subtitle{margin:0 0 18px; color:var(--muted)}
-    .grid{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-    }
-    @media (max-width: 980px){
-      .brand{min-width:unset}
-      .grid{grid-template-columns:1fr}
-      .topbar-inner{align-items:flex-start}
-    }
-    fieldset{
-      border: 1px solid rgba(255,255,255,.10);
-      background: rgba(255,255,255,.03);
-      border-radius: var(--radius2);
-      padding: 14px;
-      margin: 0;
-    }
-    legend{
-      padding: 0 10px;
-      color: var(--muted);
-      font-weight: 750;
-    }
-    .row{
-      display:grid;
-      grid-template-columns: 1.1fr 1fr;
-      gap: 10px;
-      align-items:center;
-      padding: 8px 0;
-      border-bottom: 1px dashed rgba(255,255,255,.08);
-    }
-    .row:last-child{border-bottom:none}
-    label{color: var(--muted); font-weight:650}
-    input, select{
-      width:100%;
-      padding: 10px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,.14);
-      background: rgba(15,22,38,.68);
-      color: var(--text);
-      outline:none;
-    }
-    input:focus, select:focus{box-shadow: 0 0 0 3px rgba(90,190,255,.18); border-color: rgba(90,190,255,.35)}
-    .help{
-      color: var(--muted2);
-      font-size: 13px;
-      line-height: 1.35;
-      margin-top: 10px;
-    }
-    .btnbar{display:flex; gap:10px; flex-wrap:wrap; margin-top: 14px;}
-    .btn{
-      padding: 11px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(90,190,255,.35);
-      background: var(--btn);
-      color: var(--text);
-      cursor:pointer;
-      font-weight: 800;
-    }
-    .btn:hover{background: var(--btn2)}
-    .out{
-      margin-top: 14px;
-      border-radius: var(--radius2);
-      border: 1px solid rgba(255,255,255,.10);
-      background: var(--card2);
-      padding: 14px;
-    }
-    .kpi{
-      display:grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-top: 12px;
-    }
-    @media (max-width: 980px){ .kpi{grid-template-columns:1fr 1fr} }
-    .kpi .box{
-      border:1px solid rgba(255,255,255,.10);
-      border-radius: 16px;
-      background: rgba(255,255,255,.03);
-      padding: 12px;
-      min-height: 70px;
-    }
-    .kpi .box b{display:block; font-size: 16px; margin-top:6px}
-    .kpi .box span{color: var(--muted2); font-size: 13px}
-    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
-    .sectionTitle{margin:14px 0 8px; font-size: 16px; color: var(--text); font-weight:850;}
-    .hr{height:1px; background: rgba(255,255,255,.10); margin: 14px 0;}
-    details{
-      border: 1px solid rgba(255,255,255,.10);
-      border-radius: 16px;
-      background: rgba(255,255,255,.03);
-      padding: 10px 12px;
-      margin-top: 12px;
-    }
-    summary{cursor:pointer; font-weight:800; color:var(--muted)}
-    ul{margin:10px 0 0 18px; color:var(--muted)}
-    .muted{color:var(--muted2)}
-    .foot{max-width: var(--max); margin: 16px auto 40px; padding: 0 16px; color: var(--muted2);}
-    .tag{
-      display:inline-block;
-      padding: 5px 10px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.12);
-      background: rgba(255,255,255,.04);
-      font-size: 12px;
-      margin-right: 6px;
-      color: var(--muted);
-    }
-  </style>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
@@ -218,7 +21,7 @@
 
       <nav class="nav">
         <button class="pill" id="btnHome">Kezdő</button>
-        <button class="pill active" id="btnCalc">Kalkulátor</button>
+        <button class="pill" id="btnCalc">Kalkulátor</button>
         <button class="pill" id="btn3d">3D nézet</button>
         <button class="pill" id="btnDocs">Tudástár</button>
       </nav>
@@ -227,25 +30,72 @@
 
   <main class="wrap">
     <!-- HOME -->
-    <section class="card" id="viewHome" style="display:none;">
-      <h2 class="title">Üdv! 👷‍♂️🏠</h2>
-      <p class="subtitle">
-        Ez a verzió <b>fizikai elven számol</b> (U·A + légcsere + HDD), és azt hasonlítja:
-        <b>Jelenlegi → Cél</b>. A számok ezért “valósabbak”, és az összes feltételezés látszik.
-      </p>
-      <div class="out">
-        <div class="tag">UA + infiltráció</div>
-        <div class="tag">HDD (HU átlag)</div>
-        <div class="tag">gáz / kondenz / hőszivattyú</div>
-        <p class="help">
-          Fontos: ez döntéstámogatás, nem hivatalos energetikai tanúsítás. A valós eredmények függnek:
-          falazattól, ablakoktól, légzárástól, hőhidaktól, szokásoktól, gépészettől.
-        </p>
+    <section class="card home" id="viewHome">
+      <div class="home-hero">
+        <div class="home-copy">
+          <div class="home-badge">
+            <span class="dot"></span>
+            Valós(abb) becslés • Jelenlegi → Cél • HU átlag HDD
+          </div>
+
+          <h2 class="home-title">
+            Érthető energia-spórolás<br/>
+            <span class="accent">számokkal alátámasztva.</span>
+          </h2>
+
+          <p class="home-lead">
+            Add meg a <b>mostani</b> állapotot és a <b>cél</b> állapotot.
+            A rendszer megmutatja a különbséget: <b>Ft/év</b>, <b>Ft/hó</b>, <b>% javulás</b>,
+            “csak fal / csak födém / csak fűtés” összehasonlítás, és a <b>megtérülés</b>.
+          </p>
+
+          <div class="home-cta">
+            <button class="btn btn-primary" id="homeGoCalc">🚀 Kalkulátor indítása</button>
+            <button class="btn btn-ghost" id="homeGoDocs">📘 Tudástár</button>
+          </div>
+
+          <p class="home-note">
+            Döntéstámogatás. Nem hivatalos energetikai tanúsítás.
+          </p>
+        </div>
+
+        <div class="home-side">
+          <div class="home-card glass">
+            <div class="miniTitle">Mit kapsz?</div>
+            <ul class="home-list">
+              <li>✅ MOST vs CÉL költség (Ft/év, Ft/hó)</li>
+              <li>✅ Javulás (%) + kWh/év becslés</li>
+              <li>✅ Prioritás: mi hozza a legtöbb Ft/év megtakarítást</li>
+              <li>✅ “Csak X” összehasonlítás (fal / födém / padló / fűtés)</li>
+              <li>✅ Beruházás + megtérülés (állítható helyi árakkal)</li>
+            </ul>
+
+            <div class="chips">
+              <span class="chip">UA + infiltráció</span>
+              <span class="chip">HDD (HU átlag)</span>
+              <span class="chip">gáz / kondenz / hőszivattyú</span>
+            </div>
+          </div>
+
+          <div class="home-card glass">
+            <div class="miniTitle">Mi alapján számol?</div>
+            <div class="home-math">
+              <div><b>H</b> = Σ(U·A) + <b>Hvent</b></div>
+              <div class="muted">Hvent ≈ 0.33 · n · V</div>
+              <div><b>Q</b> ≈ H · HDD · 24 / 1000</div>
+              <div class="muted">… majd kalibrálás a MOST Ft/év alapján</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- animált fénycsík -->
+        <div class="light-streak"></div>
+        <div class="light-streak streak2"></div>
       </div>
     </section>
 
     <!-- CALC -->
-    <section class="card" id="viewCalc">
+    <section class="card" id="viewCalc" style="display:none;">
       <h2 class="title">Energia kalkulátor (Jelenlegi → Cél)</h2>
       <p class="subtitle">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</p>
 
