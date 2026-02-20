@@ -43,6 +43,40 @@
     </section>
 
     <section id="viewCalc" class="card hidden">
+  <h2>Alap energia felmérés</h2>
+
+  <div style="margin-top:15px; display:grid; gap:12px;">
+
+    <label>
+      Alapterület (m²):
+      <input type="number" id="area" value="100" style="width:100%; padding:8px; margin-top:4px;">
+    </label>
+
+    <label>
+      Fal szigetelés vastagság (cm):
+      <input type="number" id="wallIns" value="5" style="width:100%; padding:8px; margin-top:4px;">
+    </label>
+
+    <label>
+      Födém szigetelés vastagság (cm):
+      <input type="number" id="roofIns" value="0" style="width:100%; padding:8px; margin-top:4px;">
+    </label>
+
+    <label>
+      Fűtési rendszer:
+      <select id="heating" style="width:100%; padding:8px; margin-top:4px;">
+        <option value="gaz">Régi gázkazán</option>
+        <option value="kondenzacios">Kondenzációs kazán</option>
+        <option value="hoszivattyu">Hőszivattyú</option>
+      </select>
+    </label>
+
+    <button onclick="calculateEnergy()" class="btn">Elemzés</button>
+
+    <div id="resultBox" style="margin-top:15px; padding:12px; border:1px solid rgba(255,255,255,.2); border-radius:12px;"></div>
+
+  </div>
+    </section>
       <h2>Alap kalkulátor (következő lépés)</h2>
       <p class="muted">Itt lesz a gyors felmérés + prioritási lista + megtérülés becslés.</p>
       <div class="placeholder">Következő lépésben ide építjük be.</div>
