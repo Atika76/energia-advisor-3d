@@ -3,128 +3,478 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Energia Advisor 3D – MVP</title>
-  <link rel="stylesheet" href="./style.css" />
-</head>
-<body>
-  <header class="top">
-    <div class="brand">
-      <div class="logo">EA</div>
-      <div>
-        <div class="title">Energia Advisor 3D</div>
-        <div class="subtitle">MVP • külön repo • később SzakiPiacba integrálható</div>
-      </div>
-    </div>
+  <title>Energia Advisor 3D – Valós kalkulátor (C)</title>
 
-    <nav class="nav">
-      <button id="btnHome" class="btn active">Kezdő</button>
-      <button id="btnCalc" class="btn">Kalkulátor</button>
-      <button id="btn3d" class="btn">3D nézet</button>
-      <button id="btnDocs" class="btn">Tudástár</button>
-    </nav>
+  <!-- Ha van saját style.css-ed, hagyd meg (nem kötelező) -->
+  <!-- <link rel="stylesheet" href="./style.css" /> -->
+
+  <style>
+    :root{
+      --bg1:#0b1220;
+      --bg2:#111a2c;
+      --card: rgba(255,255,255,.06);
+      --card2: rgba(255,255,255,.045);
+      --line: rgba(255,255,255,.12);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.72);
+      --muted2: rgba(255,255,255,.58);
+      --btn: rgba(84,110,255,.25);
+      --btn2: rgba(84,110,255,.35);
+      --ok: rgba(90,220,170,.9);
+      --warn: rgba(255,190,90,.9);
+      --bad: rgba(255,110,120,.9);
+      --shadow: 0 18px 55px rgba(0,0,0,.45);
+      --radius: 22px;
+      --radius2: 14px;
+      --pad: 18px;
+      --pad2: 14px;
+      --max: 1180px;
+      font-synthesis-weight:none;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 15% 20%, rgba(90,210,255,.18), transparent 55%),
+                  radial-gradient(1200px 900px at 85% 25%, rgba(140,90,255,.18), transparent 55%),
+                  linear-gradient(180deg, var(--bg1), var(--bg2));
+      color:var(--text);
+      min-height:100vh;
+    }
+    .topbar{
+      position:sticky; top:0; z-index:9;
+      backdrop-filter: blur(14px);
+      background: linear-gradient(180deg, rgba(12,18,32,.86), rgba(12,18,32,.60));
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .topbar-inner{
+      max-width: var(--max);
+      margin: 0 auto;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 14px 16px;
+      gap: 14px;
+    }
+    .brand{display:flex; align-items:center; gap:12px; min-width: 260px;}
+    .logo{
+      width:44px; height:44px;
+      border-radius: 14px;
+      display:grid; place-items:center;
+      background: linear-gradient(145deg, rgba(90,190,255,.85), rgba(120,90,255,.85));
+      box-shadow: var(--shadow);
+      font-weight:800;
+      letter-spacing:.5px;
+    }
+    .brand h1{margin:0; font-size:16px; line-height:1.1}
+    .brand small{display:block; color:var(--muted2); font-weight:500; margin-top:4px}
+    .nav{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end}
+    .pill{
+      padding:10px 14px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      cursor:pointer;
+      font-weight:650;
+      transition: .15s ease;
+      user-select:none;
+    }
+    .pill:hover{transform: translateY(-1px); background: rgba(255,255,255,.08)}
+    .pill.active{border-color: rgba(90,190,255,.45); box-shadow: 0 0 0 3px rgba(90,190,255,.15) inset;}
+    .wrap{max-width: var(--max); margin: 26px auto; padding: 0 16px;}
+    .card{
+      border:1px solid rgba(255,255,255,.10);
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: var(--pad);
+    }
+    .title{
+      font-size: 26px;
+      margin: 0 0 8px;
+      letter-spacing:.2px;
+    }
+    .subtitle{margin:0 0 18px; color:var(--muted)}
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 980px){
+      .brand{min-width:unset}
+      .grid{grid-template-columns:1fr}
+      .topbar-inner{align-items:flex-start}
+    }
+    fieldset{
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.03);
+      border-radius: var(--radius2);
+      padding: 14px;
+      margin: 0;
+    }
+    legend{
+      padding: 0 10px;
+      color: var(--muted);
+      font-weight: 750;
+    }
+    .row{
+      display:grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 10px;
+      align-items:center;
+      padding: 8px 0;
+      border-bottom: 1px dashed rgba(255,255,255,.08);
+    }
+    .row:last-child{border-bottom:none}
+    label{color: var(--muted); font-weight:650}
+    input, select{
+      width:100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(15,22,38,.68);
+      color: var(--text);
+      outline:none;
+    }
+    input:focus, select:focus{box-shadow: 0 0 0 3px rgba(90,190,255,.18); border-color: rgba(90,190,255,.35)}
+    .help{
+      color: var(--muted2);
+      font-size: 13px;
+      line-height: 1.35;
+      margin-top: 10px;
+    }
+    .btnbar{display:flex; gap:10px; flex-wrap:wrap; margin-top: 14px;}
+    .btn{
+      padding: 11px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(90,190,255,.35);
+      background: var(--btn);
+      color: var(--text);
+      cursor:pointer;
+      font-weight: 800;
+    }
+    .btn:hover{background: var(--btn2)}
+    .out{
+      margin-top: 14px;
+      border-radius: var(--radius2);
+      border: 1px solid rgba(255,255,255,.10);
+      background: var(--card2);
+      padding: 14px;
+    }
+    .kpi{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    @media (max-width: 980px){ .kpi{grid-template-columns:1fr 1fr} }
+    .kpi .box{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      background: rgba(255,255,255,.03);
+      padding: 12px;
+      min-height: 70px;
+    }
+    .kpi .box b{display:block; font-size: 16px; margin-top:6px}
+    .kpi .box span{color: var(--muted2); font-size: 13px}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+    .sectionTitle{margin:14px 0 8px; font-size: 16px; color: var(--text); font-weight:850;}
+    .hr{height:1px; background: rgba(255,255,255,.10); margin: 14px 0;}
+    details{
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 16px;
+      background: rgba(255,255,255,.03);
+      padding: 10px 12px;
+      margin-top: 12px;
+    }
+    summary{cursor:pointer; font-weight:800; color:var(--muted)}
+    ul{margin:10px 0 0 18px; color:var(--muted)}
+    .muted{color:var(--muted2)}
+    .foot{max-width: var(--max); margin: 16px auto 40px; padding: 0 16px; color: var(--muted2);}
+    .tag{
+      display:inline-block;
+      padding: 5px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04);
+      font-size: 12px;
+      margin-right: 6px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo">EA</div>
+        <div>
+          <h1>Energia Advisor 3D</h1>
+          <small>MVP • valós (C) kalkulátor • később SzakiPiacba integrálható</small>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="pill" id="btnHome">Kezdő</button>
+        <button class="pill active" id="btnCalc">Kalkulátor</button>
+        <button class="pill" id="btn3d">3D nézet</button>
+        <button class="pill" id="btnDocs">Tudástár</button>
+      </nav>
+    </div>
   </header>
 
   <main class="wrap">
-
-    <section id="viewHome" class="card">
-      <h1>Üdv! 👷‍♂️🏠</h1>
-      <p>
-        Ez egy különálló projekt: <b>energiahatékonysági tanácsadás + kalkulátor + 3D megtekintés</b>.
-        Most a <b>kalkulátor</b> már két állapot alapján számol: <b>Jelenlegi</b> vs <b>Cél</b>.
+    <!-- HOME -->
+    <section class="card" id="viewHome" style="display:none;">
+      <h2 class="title">Üdv! 👷‍♂️🏠</h2>
+      <p class="subtitle">
+        Ez a verzió <b>fizikai elven számol</b> (U·A + légcsere + HDD), és azt hasonlítja:
+        <b>Jelenlegi → Cél</b>. A számok ezért “valósabbak”, és az összes feltételezés látszik.
       </p>
-      <ul>
-        <li><b>1. kör:</b> működő weboldal (GitHub Pages)</li>
-        <li><b>2. kör:</b> B típusú kalkulátor (jelenlegi vs célállapot) ✅</li>
-        <li><b>3. kör:</b> egyszerű 3D “dobozház” (látvány)</li>
-        <li><b>4. kör:</b> tervrajz/kép input (később)</li>
-      </ul>
-      <p class="muted">
-        Fontos: ez döntéstámogatás, nem hivatalos energetikai tanúsítás.
-      </p>
+      <div class="out">
+        <div class="tag">UA + infiltráció</div>
+        <div class="tag">HDD (HU átlag)</div>
+        <div class="tag">gáz / kondenz / hőszivattyú</div>
+        <p class="help">
+          Fontos: ez döntéstámogatás, nem hivatalos energetikai tanúsítás. A valós eredmények függnek:
+          falazattól, ablakoktól, légzárástól, hőhidaktól, szokásoktól, gépészettől.
+        </p>
+      </div>
     </section>
 
-    <section id="viewCalc" class="card hidden">
-      <h2>Energia kalkulátor (Jelenlegi → Cél)</h2>
-      <p class="muted">
-        Add meg a mostani állapotot és a cél állapotot. A megtérülés a kettő különbségéből számolódik.
-      </p>
+    <!-- CALC -->
+    <section class="card" id="viewCalc">
+      <h2 class="title">Energia kalkulátor (Jelenlegi → Cél)</h2>
+      <p class="subtitle">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</p>
 
-      <div class="grid2">
-        <div class="panel">
-          <h3>Jelenlegi állapot</h3>
+      <div class="grid">
+        <!-- JELENLEGI -->
+        <fieldset>
+          <legend>Jelenlegi állapot</legend>
 
-          <label>Alapterület (m²):
-            <input type="number" id="area" value="100" min="1" />
-          </label>
-
-          <label>Fal szigetelés (cm):
-            <input type="number" id="wallNow" value="5" min="0" />
-          </label>
-
-          <label>Födém/padlás szigetelés (cm):
-            <input type="number" id="roofNow" value="0" min="0" />
-          </label>
-
-          <label>Fűtési rendszer:
-            <select id="heatNow">
-              <option value="gaz">Régi gázkazán</option>
-              <option value="kondenzacios">Kondenzációs kazán</option>
-              <option value="hoszivattyu">Hőszivattyú</option>
-            </select>
-          </label>
-
-          <label>Éves fűtési költség (Ft):
-            <input type="number" id="annualCost" value="600000" min="0" />
-          </label>
-        </div>
-
-        <div class="panel">
-          <h3>Cél állapot</h3>
-
-          <label>Fal szigetelés cél (cm):
-            <input type="number" id="wallTarget" value="15" min="0" />
-          </label>
-
-          <label>Födém/padlás cél (cm):
-            <input type="number" id="roofTarget" value="25" min="0" />
-          </label>
-
-          <label>Fűtési rendszer cél:
-            <select id="heatTarget">
-              <option value="gaz">Régi gázkazán</option>
-              <option value="kondenzacios">Kondenzációs kazán</option>
-              <option value="hoszivattyu" selected>Hőszivattyú</option>
-            </select>
-          </label>
-
-          <div class="muted" style="margin-top:10px;">
-            Tipp: ha “csak szigetelést” nézel, a fűtés célt hagyd ugyanazon.
+          <div class="row">
+            <label for="area">Alapterület (m²)</label>
+            <input id="area" type="number" min="20" step="1" value="100">
           </div>
-        </div>
+
+          <div class="row">
+            <label for="storeys">Szintek száma</label>
+            <select id="storeys">
+              <option value="1" selected>1 szint</option>
+              <option value="2">2 szint</option>
+              <option value="3">3 szint</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="height">Belmagasság (m)</label>
+            <input id="height" type="number" min="2.2" max="3.2" step="0.1" value="2.6">
+          </div>
+
+          <div class="row">
+            <label for="wallType">Falazat típusa</label>
+            <select id="wallType">
+              <option value="brick" selected>Tégla (átlagos régi)</option>
+              <option value="adobe">Vályog (átlagos)</option>
+              <option value="concrete">Beton/panel (átlagos)</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="winRatio">Ablak arány a falfelülethez (%)</label>
+            <input id="winRatio" type="number" min="5" max="35" step="1" value="18">
+          </div>
+
+          <div class="row">
+            <label for="nAir">Légcsere (1/h)</label>
+            <input id="nAir" type="number" min="0.2" max="1.2" step="0.05" value="0.6">
+          </div>
+
+          <div class="row">
+            <label for="wallInsNow">Fal szigetelés (cm)</label>
+            <input id="wallInsNow" type="number" min="0" max="30" step="1" value="0">
+          </div>
+
+          <div class="row">
+            <label for="wallInsMat">Fal szigetelés anyag</label>
+            <select id="wallInsMat">
+              <option value="eps" selected>EPS</option>
+              <option value="rockwool">Kőzetgyapot</option>
+              <option value="xps">XPS</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="roofInsNow">Födém/padlás szigetelés (cm)</label>
+            <input id="roofInsNow" type="number" min="0" max="50" step="1" value="0">
+          </div>
+
+          <div class="row">
+            <label for="roofInsMat">Födém szigetelés anyag</label>
+            <select id="roofInsMat">
+              <option value="rockwool" selected>Kőzetgyapot</option>
+              <option value="eps">EPS</option>
+              <option value="xps">XPS</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="floorInsNow">Padló/aljzat szigetelés (cm)</label>
+            <input id="floorInsNow" type="number" min="0" max="20" step="1" value="0">
+          </div>
+
+          <div class="row">
+            <label for="floorInsMat">Padló szigetelés anyag</label>
+            <select id="floorInsMat">
+              <option value="xps" selected>XPS</option>
+              <option value="eps">EPS</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="heatingNow">Fűtési rendszer</label>
+            <select id="heatingNow">
+              <option value="gas_old" selected>Régi gázkazán</option>
+              <option value="gas_cond">Kondenzációs gázkazán</option>
+              <option value="hp">Hőszivattyú</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="scopNow">Hőszivattyú SCOP (ha HP)</label>
+            <input id="scopNow" type="number" min="2.2" max="5.0" step="0.1" value="3.2">
+          </div>
+
+          <div class="row">
+            <label for="annualCostNow">Éves fűtési költség MOST (Ft/év)</label>
+            <input id="annualCostNow" type="number" min="0" step="10000" value="600000">
+          </div>
+
+          <p class="help">
+            Tipp: ha nem tudod a pontos U-értékeket, nem baj — ez a modell tipikus magyar régi szerkezetből indul,
+            és a megadott szigetelésből számolja a változást.
+          </p>
+        </fieldset>
+
+        <!-- CEL -->
+        <fieldset>
+          <legend>Cél állapot</legend>
+
+          <div class="row">
+            <label for="wallInsTarget">Fal szigetelés CÉL (cm)</label>
+            <input id="wallInsTarget" type="number" min="0" max="30" step="1" value="15">
+          </div>
+
+          <div class="row">
+            <label for="roofInsTarget">Födém/padlás CÉL (cm)</label>
+            <input id="roofInsTarget" type="number" min="0" max="60" step="1" value="25">
+          </div>
+
+          <div class="row">
+            <label for="floorInsTarget">Padló/aljzat CÉL (cm)</label>
+            <input id="floorInsTarget" type="number" min="0" max="20" step="1" value="10">
+          </div>
+
+          <div class="row">
+            <label for="heatingTarget">Fűtési rendszer CÉL</label>
+            <select id="heatingTarget">
+              <option value="gas_old">Régi gázkazán</option>
+              <option value="gas_cond">Kondenzációs gázkazán</option>
+              <option value="hp" selected>Hőszivattyú</option>
+            </select>
+          </div>
+
+          <div class="row">
+            <label for="scopTarget">Hőszivattyú SCOP CÉL (ha HP)</label>
+            <input id="scopTarget" type="number" min="2.2" max="5.0" step="0.1" value="3.6">
+          </div>
+
+          <div class="row">
+            <label for="hdd">HDD (fűtési foknap, HU átlag)</label>
+            <input id="hdd" type="number" min="1800" max="4500" step="50" value="3000">
+          </div>
+
+          <div class="row">
+            <label for="priceGas">Gáz ár (Ft/kWh)</label>
+            <input id="priceGas" type="number" min="10" max="120" step="1" value="40">
+          </div>
+
+          <div class="row">
+            <label for="priceEl">Villany ár (Ft/kWh)</label>
+            <input id="priceEl" type="number" min="20" max="180" step="1" value="70">
+          </div>
+
+          <details>
+            <summary>Haladó: költségek / korrekciók (ajánlott)</summary>
+
+            <div class="row">
+              <label for="bridge">Hőhíd korrekció (%)</label>
+              <input id="bridge" type="number" min="0" max="25" step="1" value="10">
+            </div>
+
+            <div class="row">
+              <label for="costWallM2">Fal szigetelés fajlagos (Ft/m² @10cm)</label>
+              <input id="costWallM2" type="number" min="5000" step="500" value="18000">
+            </div>
+
+            <div class="row">
+              <label for="costRoofM2">Födém szigetelés fajlagos (Ft/m² @10cm)</label>
+              <input id="costRoofM2" type="number" min="4000" step="500" value="12000">
+            </div>
+
+            <div class="row">
+              <label for="costFloorM2">Padló szigetelés fajlagos (Ft/m² @10cm)</label>
+              <input id="costFloorM2" type="number" min="6000" step="500" value="15000">
+            </div>
+
+            <div class="row">
+              <label for="costHeating">Fűtés korszerűsítés (Ft, egyszeri)</label>
+              <input id="costHeating" type="number" min="0" step="50000" value="3500000">
+            </div>
+
+            <p class="help">
+              Ezek az összegek irányárak. Ha beírod a saját helyi áraiddal, a megtérülés is sokkal valósabb lesz.
+            </p>
+          </details>
+
+          <div class="btnbar">
+            <button class="btn" id="btnCalcRun">Elemzés</button>
+            <button class="btn" id="btnReset" title="Vissza alapokra">Alapértékek</button>
+          </div>
+
+          <p class="help">
+            <b>Fontos:</b> A MOST költséget (Ft/év) te adod meg – ezt tekintjük “valós” bázisnak.
+            A modell ebből számol vissza egy “MOST hőigényt”, majd előre számolja a CÉL hőigényt.
+          </p>
+        </fieldset>
       </div>
 
-      <button class="btn wide" onclick="calculateEnergyB()">Elemzés</button>
-
-      <div id="resultBox" class="resultBox"></div>
+      <div class="out" id="resultBox">
+        <div class="sectionTitle">Eredmény</div>
+        <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+      </div>
     </section>
 
-    <section id="view3d" class="card hidden">
-      <h2>3D nézet (később)</h2>
-      <p class="muted">Itt lesz a 3D megtekintés (Three.js) – először egyszerű “dobozház”.</p>
-      <div class="placeholder">Következő lépésben.</div>
+    <!-- 3D -->
+    <section class="card" id="view3d" style="display:none;">
+      <h2 class="title">3D nézet (később)</h2>
+      <p class="subtitle">Itt lesz a 3D “dobozház” nézet (Three.js) – a kalkulátor adataiból.</p>
+      <div class="out"><span class="muted">Következő körben jön.</span></div>
     </section>
 
-    <section id="viewDocs" class="card hidden">
-      <h2>Tudástár (később)</h2>
-      <p class="muted">Rövid, érthető cikkek: mire figyelj, tipikus hibák, kérdéslista szakiknak.</p>
-      <div class="placeholder">Később ide jönnek a cikkek.</div>
+    <!-- DOCS -->
+    <section class="card" id="viewDocs" style="display:none;">
+      <h2 class="title">Tudástár (később)</h2>
+      <p class="subtitle">Rövid, érthető cikkek: tipikus hibák, kérdéslista szakiknak, mire figyelj.</p>
+      <div class="out"><span class="muted">Következő körben jön.</span></div>
     </section>
-
   </main>
 
-  <footer class="foot">
-    <span>Energia Advisor 3D • MVP</span>
-  </footer>
+  <div class="foot">
+    Megjegyzés: döntéstámogatás. A számítások becslések, a valóságban a szerkezetek, légzárás, hőhidak, árak és szokások erősen befolyásolnak.
+  </div>
 
   <script src="./main.js"></script>
 </body>
