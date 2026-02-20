@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-
   <header class="top">
     <div class="brand">
       <div class="logo">EA</div>
@@ -27,94 +26,98 @@
 
   <main class="wrap">
 
-    <!-- KEZDŐ -->
     <section id="viewHome" class="card">
       <h1>Üdv! 👷‍♂️🏠</h1>
       <p>
-        Ez egy különálló projekt:
-        <b>energiahatékonysági tanácsadás + kalkulátor + 3D megtekintés</b>.
-        Lépésről lépésre építjük fel.
+        Ez egy különálló projekt: <b>energiahatékonysági tanácsadás + kalkulátor + 3D megtekintés</b>.
+        Most a <b>kalkulátor</b> már két állapot alapján számol: <b>Jelenlegi</b> vs <b>Cél</b>.
       </p>
-
       <ul>
-        <li><b>1. kör:</b> struktúra + működő weboldal</li>
-        <li><b>2. kör:</b> alap kalkulátor (prioritás)</li>
-        <li><b>3. kör:</b> megtérülés számítás</li>
-        <li><b>4. kör:</b> 3D nézet</li>
+        <li><b>1. kör:</b> működő weboldal (GitHub Pages)</li>
+        <li><b>2. kör:</b> B típusú kalkulátor (jelenlegi vs célállapot) ✅</li>
+        <li><b>3. kör:</b> egyszerű 3D “dobozház” (látvány)</li>
+        <li><b>4. kör:</b> tervrajz/kép input (később)</li>
       </ul>
-
       <p class="muted">
         Fontos: ez döntéstámogatás, nem hivatalos energetikai tanúsítás.
       </p>
     </section>
 
-    <!-- KALKULÁTOR -->
     <section id="viewCalc" class="card hidden">
-      <h2>Alap energia felmérés</h2>
+      <h2>Energia kalkulátor (Jelenlegi → Cél)</h2>
+      <p class="muted">
+        Add meg a mostani állapotot és a cél állapotot. A megtérülés a kettő különbségéből számolódik.
+      </p>
 
-      <div style="margin-top:15px; display:grid; gap:14px;">
+      <div class="grid2">
+        <div class="panel">
+          <h3>Jelenlegi állapot</h3>
 
-        <label>
-          Alapterület (m²):
-          <input type="number" id="area" value="100"
-                 style="width:100%; padding:8px; margin-top:4px;">
-        </label>
+          <label>Alapterület (m²):
+            <input type="number" id="area" value="100" min="1" />
+          </label>
 
-        <label>
-          Fal szigetelés vastagság (cm):
-          <input type="number" id="wallIns" value="5"
-                 style="width:100%; padding:8px; margin-top:4px;">
-        </label>
+          <label>Fal szigetelés (cm):
+            <input type="number" id="wallNow" value="5" min="0" />
+          </label>
 
-        <label>
-          Födém szigetelés vastagság (cm):
-          <input type="number" id="roofIns" value="0"
-                 style="width:100%; padding:8px; margin-top:4px;">
-        </label>
+          <label>Födém/padlás szigetelés (cm):
+            <input type="number" id="roofNow" value="0" min="0" />
+          </label>
 
-        <label>
-          Fűtési rendszer:
-          <select id="heating"
-                  style="width:100%; padding:8px; margin-top:4px;">
-            <option value="gaz">Régi gázkazán</option>
-            <option value="kondenzacios">Kondenzációs kazán</option>
-            <option value="hoszivattyu">Hőszivattyú</option>
-          </select>
-        </label>
+          <label>Fűtési rendszer:
+            <select id="heatNow">
+              <option value="gaz">Régi gázkazán</option>
+              <option value="kondenzacios">Kondenzációs kazán</option>
+              <option value="hoszivattyu">Hőszivattyú</option>
+            </select>
+          </label>
 
-        <label>
-          Éves fűtési költség (Ft):
-          <input type="number" id="annualCost" value="600000"
-                 style="width:100%; padding:8px; margin-top:4px;">
-        </label>
-
-        <button onclick="calculateEnergy()" class="btn">
-          Elemzés
-        </button>
-
-        <div id="resultBox"
-             style="margin-top:15px; padding:12px;
-                    border:1px solid rgba(255,255,255,.2);
-                    border-radius:12px;">
+          <label>Éves fűtési költség (Ft):
+            <input type="number" id="annualCost" value="600000" min="0" />
+          </label>
         </div>
 
+        <div class="panel">
+          <h3>Cél állapot</h3>
+
+          <label>Fal szigetelés cél (cm):
+            <input type="number" id="wallTarget" value="15" min="0" />
+          </label>
+
+          <label>Födém/padlás cél (cm):
+            <input type="number" id="roofTarget" value="25" min="0" />
+          </label>
+
+          <label>Fűtési rendszer cél:
+            <select id="heatTarget">
+              <option value="gaz">Régi gázkazán</option>
+              <option value="kondenzacios">Kondenzációs kazán</option>
+              <option value="hoszivattyu" selected>Hőszivattyú</option>
+            </select>
+          </label>
+
+          <div class="muted" style="margin-top:10px;">
+            Tipp: ha “csak szigetelést” nézel, a fűtés célt hagyd ugyanazon.
+          </div>
+        </div>
       </div>
+
+      <button class="btn wide" onclick="calculateEnergyB()">Elemzés</button>
+
+      <div id="resultBox" class="resultBox"></div>
     </section>
 
-    <!-- 3D -->
     <section id="view3d" class="card hidden">
       <h2>3D nézet (később)</h2>
-      <p class="muted">
-        Itt lesz a 3D megtekintés (Three.js).
-      </p>
+      <p class="muted">Itt lesz a 3D megtekintés (Three.js) – először egyszerű “dobozház”.</p>
+      <div class="placeholder">Következő lépésben.</div>
     </section>
 
-    <!-- TUDÁSTÁR -->
     <section id="viewDocs" class="card hidden">
       <h2>Tudástár (később)</h2>
-      <p class="muted">
-        Rövid, érthető cikkek energiahatékonyságról.
-      </p>
+      <p class="muted">Rövid, érthető cikkek: mire figyelj, tipikus hibák, kérdéslista szakiknak.</p>
+      <div class="placeholder">Később ide jönnek a cikkek.</div>
     </section>
 
   </main>
@@ -124,6 +127,5 @@
   </footer>
 
   <script src="./main.js"></script>
-
 </body>
 </html>
