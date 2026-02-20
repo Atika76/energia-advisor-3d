@@ -1,6 +1,7 @@
 /* Energia Advisor 3D – Valós (C) kalkulátor
    - UA + infiltráció + HDD
    - Kalibrálás: a MOST Ft/év értéket bázisnak vesszük (hogy a modell "valós" legyen)
+   + Tudástár (MVP): keresés, kategóriák, cikk lista + cikk megjelenítés
 */
 
 (function () {
@@ -21,28 +22,34 @@
   const homeGoDocs = $("homeGoDocs");
 
   function setActive(btn) {
-    [btnHome, btnCalc, btn3d, btnDocs].forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
+    [btnHome, btnCalc, btn3d, btnDocs].forEach(b => b && b.classList.remove("active"));
+    btn && btn.classList.add("active");
   }
 
   function showView(which) {
-    viewHome.style.display = which === "home" ? "" : "none";
-    viewCalc.style.display = which === "calc" ? "" : "none";
-    view3d.style.display = which === "3d" ? "" : "none";
-    viewDocs.style.display = which === "docs" ? "" : "none";
+    if (viewHome) viewHome.style.display = which === "home" ? "" : "none";
+    if (viewCalc) viewCalc.style.display = which === "calc" ? "" : "none";
+    if (view3d) view3d.style.display = which === "3d" ? "" : "none";
+    if (viewDocs) viewDocs.style.display = which === "docs" ? "" : "none";
 
     if (which === "home") setActive(btnHome);
     if (which === "calc") setActive(btnCalc);
     if (which === "3d") setActive(btn3d);
     if (which === "docs") setActive(btnDocs);
 
+    // ha Tudástárra váltunk, rendereljük (ha van UI)
+    if (which === "docs") {
+      initDocsUI();
+      renderDocs();
+    }
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
-  btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
-  btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
-  btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
+  btnHome && btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
+  btnCalc && btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  btn3d && btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
+  btnDocs && btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
@@ -55,7 +62,6 @@
     return showView("home");
   }
   window.addEventListener("hashchange", initByHash);
-  initByHash();
 
   // ---------- Helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -353,7 +359,7 @@
   }
 
   function renderResult(out) {
-    resultBox.innerHTML = out;
+    if (resultBox) resultBox.innerHTML = out;
   }
 
   function calcAll() {
@@ -407,9 +413,9 @@
 
     // “Csak X” összehasonlítás: csak egy elem változik a MOST-hoz képest
     function costOnly(change) {
-      const wall = change.wall ?? x.wallInsNow;
-      const roof = change.roof ?? x.roofInsNow;
-      const floor = change.floor ?? x.floorInsNow;
+      const wall = (change.wall !== undefined) ? change.wall : x.wallInsNow;
+      const roof = (change.roof !== undefined) ? change.roof : x.roofInsNow;
+      const floor = (change.floor !== undefined) ? change.floor : x.floorInsNow;
 
       const sc = computeScenario({
         area: x.area, storeys: x.storeys, height: x.height,
@@ -422,8 +428,8 @@
       const Q_model = annualHeatDemandKWh(sc.H.H, x.hdd);
       const Q_real = Q_model * calib;
 
-      const heating = change.heating ?? x.heatingNow;
-      const scop = change.scop ?? x.scopNow;
+      const heating = (change.heating !== undefined) ? change.heating : x.heatingNow;
+      const scop = (change.scop !== undefined) ? change.scop : x.scopNow;
 
       return costFromHeatDemand(Q_real, heating, x.priceGas, x.priceEl, scop);
     }
@@ -457,8 +463,6 @@
     const pbRoof = paybackYears(inv.roofCost, saveOnlyRoof);
     const pbWall = paybackYears(inv.wallCost, saveOnlyWall);
     const pbFloor = paybackYears(inv.floorCost, saveOnlyFloor);
-
-    // fűtés korszerűsítés megtérülése csak akkor számolható, ha tényleg csere van
     const pbHeat = (x.heatingTarget !== x.heatingNow) ? paybackYears(inv.heatCost, saveOnlyHeat) : Infinity;
 
     // Tech számok
@@ -481,9 +485,9 @@
       <div class="out" style="margin-top:10px;">
         <div class="sectionTitle">MOST → CÉL</div>
         <ul>
-          <li><b>Fal:</b> ${x.wallInsNow} cm → ${x.wallInsTarget} cm (${x.wallInsMat.toUpperCase()})</li>
-          <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
-          <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
+          <li><b>Fal:</b> ${x.wallInsNow} cm → ${x.wallInsTarget} cm (${String(x.wallInsMat).toUpperCase()})</li>
+          <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${String(x.roofInsMat).toUpperCase()})</li>
+          <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${String(x.floorInsMat).toUpperCase()})</li>
           <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}</li>
           <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
         </ul>
@@ -567,8 +571,8 @@
   }
 
   // events
-  btnRun.addEventListener("click", calcAll);
-  btnReset.addEventListener("click", () => {
+  btnRun && btnRun.addEventListener("click", calcAll);
+  btnReset && btnReset.addEventListener("click", () => {
     setDefaults();
     renderResult(`
       <div class="sectionTitle">Eredmény</div>
@@ -578,4 +582,298 @@
 
   // init
   setDefaults();
+  initByHash();
+
+  // =========================
+  // TUDÁSTÁR (MVP)
+  // =========================
+
+  const DOCS = [
+    {
+      id: "hdd",
+      cat: "alap",
+      title: "Mi az a HDD (fűtési foknap) és miért számít?",
+      minutes: 3,
+      tags: ["HDD", "alapok"],
+      body: [
+        "A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy év/idény egy adott helyen.",
+        "Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.",
+        "",
+        "• Magyar átlagos irányszám: ~3000 (településtől függ).",
+        "• A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.",
+        "",
+        "Gyakorlatban:",
+        "Ha ugyanaz a ház egy hidegebb környéken van, a MOST költsége magasabb → a megtakarítás forintban is magasabb lehet."
+      ]
+    },
+    {
+      id: "legcsere",
+      cat: "alap",
+      title: "Légcsere (infiltráció): a láthatatlan pénzégető",
+      minutes: 4,
+      tags: ["légcsere", "infiltráció"],
+      body: [
+        "A légcsere (n, 1/h) azt jelenti: óránként hányszor cserélődik ki a levegő a házban.",
+        "",
+        "Tipikus irányszámok:",
+        "• 0.3–0.5: viszonylag jó légzárás",
+        "• 0.6–0.9: átlagos régi ház",
+        "• 1.0 felett: huzatos / sok rés / rossz nyílászáró",
+        "",
+        "Miért fontos?",
+        "Hiába szigeteled a falat, ha a meleg levegő elszökik → a fűtés dolgozik helyette.",
+        "",
+        "Tipp kivitelező szemmel:",
+        "Ablakcserénél / padlásfeljárónál / kémény körül / födém áttöréseknél rengeteg szökik."
+      ]
+    },
+    {
+      id: "prioritas",
+      cat: "szigeteles",
+      title: "Miért a födém a legjobb első lépés sok háznál?",
+      minutes: 3,
+      tags: ["födém", "prioritás"],
+      body: [
+        "Sok magyar családi háznál a padlás/födém a legnagyobb veszteség.",
+        "Ok: a meleg levegő felfelé száll, és ha nincs rendes födém szigetelés, gyorsan elmegy.",
+        "",
+        "Miért jó kezdés?",
+        "• általában olcsóbb m²-re",
+        "• gyorsan kivitelezhető",
+        "• nagy hatás → hamarabb látszik a számlán",
+        "",
+        "Irány:",
+        "• 20–30 cm jó szint (anyagfüggő), 25 cm már erős."
+      ]
+    },
+    {
+      id: "fal",
+      cat: "szigeteles",
+      title: "Fal szigetelés: miért nem mindegy 5 cm vs 15 cm?",
+      minutes: 4,
+      tags: ["fal", "EPS", "kőzetgyapot"],
+      body: [
+        "5 cm gyakran csak 'enyhe javulás' (régi háznál sokszor még mindig nagy a veszteség).",
+        "15 cm már egy érezhető szint: stabilabb belső hőmérséklet, kisebb kazán- / hőszivattyú terhelés.",
+        "",
+        "Fontos:",
+        "A megtérülés nem csak az anyagtól függ, hanem:",
+        "• hőhidaktól",
+        "• ablakoktól",
+        "• légzárástól",
+        "• fűtési rendszertől",
+        "",
+        "Tipp:",
+        "Ha falat szigetelsz, a részletek (lábazat, koszorú, áthidaló, erkélycsatlakozás) döntik el a végeredményt."
+      ]
+    },
+    {
+      id: "padlo",
+      cat: "szigeteles",
+      title: "Padló/aljzat szigetelés: mikor éri meg?",
+      minutes: 3,
+      tags: ["padló", "komfort"],
+      body: [
+        "Padló szigetelés sokszor komfort miatt is megéri: melegebb padló, kevesebb hidegérzet.",
+        "",
+        "Mikor erős a hatása?",
+        "• ha alatta pince/üreg/nyitott tér van",
+        "• ha a padló most nagyon hideg",
+        "",
+        "Ha már kész burkolat van, költségesebb → megtérülés hosszabb lehet, de komfortban nagy nyereség."
+      ]
+    },
+    {
+      id: "futes",
+      cat: "futes",
+      title: "Régi gázkazán vs kondenz vs hőszivattyú: miért változik a matek?",
+      minutes: 5,
+      tags: ["fűtés", "SCOP"],
+      body: [
+        "Ugyanazt a hőigényt különböző hatásfokkal állítják elő.",
+        "",
+        "Durva logika:",
+        "• Régi kazán: rosszabb hatásfok → több energia kell ugyanahhoz a hőhöz",
+        "• Kondenz: jobb → kevesebb gáz ugyanarra",
+        "• Hőszivattyú: 1 kWh villanyból több kWh hő (SCOP alapján)",
+        "",
+        "Miért fontos a szigetelés előtt?",
+        "Ha nincs szigetelés, a hőszivattyú is sokat dolgozik → nagyobb rendszer kell → drágább beruházás.",
+        "Ezért sokszor: előbb szigetelés/légzárás, aztán gépészet."
+      ]
+    },
+    {
+      id: "hidak",
+      cat: "hibak",
+      title: "Hőhidak: a leggyakoribb 'nem értem miért penészedik' ok",
+      minutes: 4,
+      tags: ["hőhíd", "penész"],
+      body: [
+        "A hőhíd egy olyan pont, ahol a hő könnyebben távozik (hidegebb felület).",
+        "Ott könnyebben lecsapódik a pára → penész.",
+        "",
+        "Tipikus helyek:",
+        "• koszorú, áthidalók",
+        "• lábazat, erkélylemez",
+        "• sarkok, csatlakozások",
+        "",
+        "Ezért van 'hőhíd korrekció' a kalkulátorban: ha sok a hőhíd, a valós megtakarítás kisebb lehet."
+      ]
+    },
+    {
+      id: "kerdeslista",
+      cat: "checklist",
+      title: "Kérdéslista szakiknak: mit kérdezz, hogy ne bukj pénzt",
+      minutes: 6,
+      tags: ["kérdések", "ellenőrzés"],
+      body: [
+        "Szigetelésnél:",
+        "• milyen vastagság és miért pont az?",
+        "• lábazat/koszorú/áthidaló megoldás hogyan lesz?",
+        "• ragasztás + dübelezés rendben van-e?",
+        "• hálózás, élvédők, indítóprofil minősége?",
+        "",
+        "Fűtéskorszerűsítésnél:",
+        "• hőigény számítás van-e (ne csak ránézésre)?",
+        "• radiátorok/méretezés megfelel?",
+        "• hőszivattyúnál SCOP, HMV, zaj, elhelyezés?",
+        "",
+        "Extra:",
+        "• garancia írásban, műszaki átadás, fotódokumentáció"
+      ]
+    }
+  ];
+
+  let docsState = {
+    cat: "all",
+    q: "",
+    activeId: DOCS[0]?.id || null
+  };
+
+  let docsInited = false;
+
+  function labelCat(cat) {
+    switch (cat) {
+      case "alap": return "Alapok";
+      case "szigeteles": return "Szigetelés";
+      case "futes": return "Fűtés";
+      case "hibak": return "Tipikus hibák";
+      case "checklist": return "Kérdéslista";
+      default: return "Összes";
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (m) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
+    }[m]));
+  }
+
+  function renderDocsArticle(id, filteredList) {
+    const titleEl = $("docsTitle");
+    const metaEl = $("docsMeta");
+    const bodyEl = $("docsBody");
+    if (!titleEl || !metaEl || !bodyEl) return;
+
+    const d = DOCS.find(x => x.id === id) || filteredList?.[0] || DOCS[0];
+    if (!d) return;
+
+    titleEl.textContent = d.title;
+    metaEl.innerHTML = `kategória: <b>${labelCat(d.cat)}</b> • ~${d.minutes} perc • ${d.tags.map(t => `<span class="tag">#${escapeHtml(t)}</span>`).join(" ")}`;
+
+    bodyEl.innerHTML = d.body.map(p => {
+      if (!p) return "<div style='height:8px'></div>";
+      if (p.startsWith("• ")) return `<div style="margin:6px 0;">• ${escapeHtml(p.slice(2))}</div>`;
+      return `<div style="margin:8px 0;">${escapeHtml(p)}</div>`;
+    }).join("");
+  }
+
+  function renderDocs() {
+    const listEl = $("docsList");
+    const countEl = $("docsCount");
+    const titleEl = $("docsTitle");
+    const metaEl = $("docsMeta");
+    const bodyEl = $("docsBody");
+
+    // ha nincs Tudástár UI az indexben, ne csináljunk semmit
+    if (!listEl || !countEl || !titleEl || !metaEl || !bodyEl) return;
+
+    const q = (docsState.q || "").trim().toLowerCase();
+    const filtered = DOCS.filter(d => {
+      const catOk = (docsState.cat === "all") || (d.cat === docsState.cat);
+      if (!catOk) return false;
+      if (!q) return true;
+      const hay = (d.title + " " + d.body.join(" ")).toLowerCase();
+      return hay.includes(q);
+    });
+
+    countEl.textContent = `${filtered.length} találat`;
+
+    listEl.innerHTML = "";
+    filtered.forEach(d => {
+      const btn = document.createElement("button");
+      btn.className = "pill" + (d.id === docsState.activeId ? " active" : "");
+      btn.style.textAlign = "left";
+      btn.style.borderRadius = "16px";
+      btn.style.padding = "12px 12px";
+
+      btn.innerHTML = `
+        <div style="font-weight:900; margin-bottom:4px;">${escapeHtml(d.title)}</div>
+        <div class="muted" style="font-size:12px;">
+          kategória: <b>${escapeHtml(labelCat(d.cat))}</b> • ~${d.minutes} perc • ${d.tags.map(t => `#${escapeHtml(t)}`).join(" ")}
+        </div>
+      `;
+
+      btn.onclick = () => {
+        docsState.activeId = d.id;
+        renderDocs();
+        renderDocsArticle(d.id, filtered);
+      };
+
+      listEl.appendChild(btn);
+    });
+
+    if (filtered.length && !filtered.some(x => x.id === docsState.activeId)) {
+      docsState.activeId = filtered[0].id;
+    }
+
+    renderDocsArticle(docsState.activeId, filtered);
+  }
+
+  function initDocsUI() {
+    if (docsInited) return;
+    docsInited = true;
+
+    const search = $("docsSearch");
+    if (search) {
+      search.addEventListener("input", (e) => {
+        docsState.q = e.target.value || "";
+        renderDocs();
+      });
+    }
+
+    document.querySelectorAll("[data-doccat]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const cat = btn.getAttribute("data-doccat") || "all";
+        docsState.cat = cat;
+
+        document.querySelectorAll("[data-doccat]").forEach(x => x.classList.remove("active"));
+        btn.classList.add("active");
+
+        renderDocs();
+      });
+    });
+
+    renderDocs();
+  }
+
+  // Ha az oldal betölt, és hash=docs, akkor induljon a tudástár is
+  document.addEventListener("DOMContentLoaded", () => {
+    // initByHash már meghívódott, de DOM itt fixen kész
+    if ((location.hash || "#home") === "#docs") {
+      initDocsUI();
+      renderDocs();
+    }
+  });
+
 })();
