@@ -90,7 +90,6 @@
   }
 
   function showView(which) {
-    // Embedben lehet, hogy csak viewCalc létezik -> nem dőlünk el.
     if (viewHome) viewHome.style.display = which === "home" ? "" : "none";
     if (viewCalc) viewCalc.style.display = which === "calc" ? "" : "none";
     if (view3d) view3d.style.display = which === "3d" ? "" : "none";
@@ -101,16 +100,12 @@
     if (which === "3d") setActive(btn3d);
     if (which === "docs") setActive(btnDocs);
 
-    // frissítések
     if (which === "docs") renderDocs();
     if (which === "3d") updateHeatmap();
 
-    try {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (_) {}
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) {}
   }
 
-  // Nav clickek csak ha léteznek
   if (btnHome) btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
   if (btnCalc) btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (btn3d) btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
@@ -126,25 +121,25 @@
     xps: 0.034
   };
 
-  // Base U-values (W/m²K) for "régi" szerkezetek (tipikus közelítés)
+  // Base U-values (W/m²K) for "régi" szerkezetek
   const U_BASE = {
-    brick: 1.25,     // régi tégla
-    adobe: 1.10,     // vályog
-    concrete: 1.60,  // panel/beton
-    roof: 1.60,      // födém/padlás szig nélkül
-    floor: 1.10,     // aljzat/padló szig nélkül
-    window: 2.60     // átlag régi/gyenge ablak
+    brick: 1.25,
+    adobe: 1.10,
+    concrete: 1.60,
+    roof: 1.60,
+    floor: 1.10,
+    window: 2.60
   };
 
   // fűtés hatásfok / COP
   const HEAT = {
     gas_old: { name: "Régi gázkazán", eff: 0.75 },
     gas_cond: { name: "Kondenzációs gázkazán", eff: 0.92 },
-    hp: { name: "Hőszivattyú", eff: null } // COP/SCOP adja
+    hp: { name: "Hőszivattyú", eff: null }
   };
 
   function uWithInsulation(uBase, thicknessCm, lambda) {
-    const t = Math.max(0, thicknessCm) / 100; // m
+    const t = Math.max(0, thicknessCm) / 100;
     if (t <= 0) return uBase;
     const r0 = 1 / uBase;
     const rIns = t / lambda;
@@ -171,7 +166,7 @@
     const H_roof = (Uroof * Aroof);
     const H_floor= (Ufloor * Afloor);
     const Htrans = H_wall + H_win + H_roof + H_floor;
-    const Hvent  = 0.33 * nAir * volume; // W/K
+    const Hvent  = 0.33 * nAir * volume;
     const bridge = 1 + (bridgePct / 100);
 
     const parts = {
@@ -289,7 +284,6 @@
   };
 
   function setDefaults() {
-    // Ha embedben hiányozna néhány mező, ne haljunk el.
     const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
 
     setVal("area", DEFAULTS.area);
@@ -357,7 +351,6 @@
   }
 
   // ---------- LINKELHETŐ KALKULÁCIÓ (share URL) ----------
-  // Hash forma: #calc&share=BASE64URL
   function parseHash(){
     const raw = (location.hash || "#home").replace(/^#/, "");
     const parts = raw.split("&").filter(Boolean);
@@ -458,7 +451,6 @@
 
   // ---------- Core calc ----------
   function readInputs() {
-    // Ha embedben hiányzik valami input, azonnal derüljön ki – de ne crasheljen.
     const val = (id, fallback) => $(id) ? $(id).value : fallback;
 
     const area = clamp(num(val("area", 100), 100), 20, 1000);
@@ -691,7 +683,6 @@
     if ((location.hash || "").includes("3d")) updateHeatmap();
   }
 
-  // events (NULL-SAFE)
   if (btnRun) btnRun.addEventListener("click", () => { flashBtn(btnRun); calcAll(); toast("Kész — frissítve."); scrollToResult(); });
   if (btnReset) btnReset.addEventListener("click", () => {
     flashBtn(btnReset);
@@ -726,7 +717,6 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
   let docSelectedId = (DOCS[0] && DOCS[0].id) ? DOCS[0].id : null;
 
   function getDocChips(){
-    // Támogatjuk: id^="docChip" vagy data-doc-cat
     const byId = Array.from(document.querySelectorAll('[id^="docChip"]'));
     const byData = Array.from(document.querySelectorAll('[data-doc-cat]'));
     return Array.from(new Set([...byId, ...byData]));
@@ -757,7 +747,6 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
       const catOk = (docFilterCat === "Összes") ? true : d.cat === docFilterCat;
       if (!catOk) return false;
       if (!q) return true;
-
       const text = `${d.title} ${d.body} ${(d.tags||[]).join(" ")}`.toLowerCase();
       return text.includes(q);
     });
@@ -800,7 +789,6 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
     if (searchEl) searchEl.value = docSearch;
   }
 
-  // Kereső
   const docSearchEl = $("docSearch");
   if (docSearchEl) {
     docSearchEl.addEventListener("input", (e) => {
@@ -809,19 +797,17 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
     });
   }
 
-  // Chip-ek (mind)
   (function bindDocChips(){
     const chips = getDocChips();
     chips.forEach(chip => {
       chip.addEventListener("click", () => {
         docFilterCat = getChipCategory(chip);
-        docSelectedId = null; // UX: szűrésnél ugorjon az első találatra
+        docSelectedId = null;
         setDocChipActive(chip);
         renderDocs();
       });
     });
 
-    // Alapértelmezett aktív chip: Összes
     const chipAll = $("docChipAll") || chips.find(c => getChipCategory(c) === "Összes") || null;
     if (chipAll) setDocChipActive(chipAll);
   })();
@@ -972,8 +958,6 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
   // ---------- initByHash (share betöltéssel) ----------
   function initByHash() {
     const { view } = parseHash();
-
-    // Ha embed page és csak a kalkulátor view létezik, mindig calc
     const onlyCalcExists = !!viewCalc && !viewHome && !view3d && !viewDocs;
 
     if (onlyCalcExists) {
@@ -1008,7 +992,6 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
     }
 
     function buildShareUrlFallback(state){
-      // Itt igazítjuk a te share formátumodra: #calc&share=...
       try{
         const token = b64urlEncode(JSON.stringify(state));
         const base = location.origin + location.pathname.replace(/\/embed\.html$/, "/index.html");
