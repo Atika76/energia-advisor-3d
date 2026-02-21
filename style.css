@@ -392,4 +392,28 @@ h1{
   .chipBtn{display:none !important;}
   .hmModes .muted{display:none !important;}
   .footerNote{display:none !important;}
+  /* ===== EMBED MÓD ===== */
+body.embed header,
+body.embed nav,
+body.embed .nav,
+body.embed .topbar,
+body.embed .navbar {
+  display: none !important;
+}
+
+/* csak a kalkulátor látszódjon */
+body.embed #viewHome,
+body.embed #view3d,
+body.embed #viewDocs {
+  display: none !important;
+}
+
+body.embed #viewCalc {
+  display: block !important;
+}
+
+/* hogy ne csússzon fel a tetejére */
+body.embed {
+  padding-top: 0 !important;
+}
 }
