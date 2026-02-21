@@ -9,51 +9,6 @@
 (function () {
   const $ = (id) => document.getElementById(id);
 
-  // NAV
-  const btnHome = $("btnHome");
-  const btnCalc = $("btnCalc");
-  const btn3d = $("btn3d");
-  const btnDocs = $("btnDocs");
-
-  const viewHome = $("viewHome");
-  const viewCalc = $("viewCalc");
-  const view3d = $("view3d");
-  const viewDocs = $("viewDocs");
-
-  const homeGoCalc = $("homeGoCalc");
-  const homeGoDocs = $("homeGoDocs");
-
-  function setActive(btn) {
-    [btnHome, btnCalc, btn3d, btnDocs].forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-  }
-
-  function showView(which) {
-    viewHome.style.display = which === "home" ? "" : "none";
-    viewCalc.style.display = which === "calc" ? "" : "none";
-    view3d.style.display = which === "3d" ? "" : "none";
-    viewDocs.style.display = which === "docs" ? "" : "none";
-
-    if (which === "home") setActive(btnHome);
-    if (which === "calc") setActive(btnCalc);
-    if (which === "3d") setActive(btn3d);
-    if (which === "docs") setActive(btnDocs);
-
-    // frissítések
-    if (which === "docs") renderDocs();
-    if (which === "3d") updateHeatmap();
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
-  btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
-  btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
-  btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
-
-  if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
-  if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
-
   // ---------- Helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, fallback = 0) => {
@@ -86,31 +41,83 @@
     return (Math.round(y * 10) / 10).toFixed(1) + " év";
   }
 
-  function flashBtn(btn){
+  function flashBtn(btn) {
     if (!btn) return;
     btn.classList.add("isBusy");
     setTimeout(() => btn.classList.remove("isBusy"), 450);
   }
 
-  function toast(msg){
+  function toast(msg) {
     let el = document.getElementById("eaToast");
-    if (!el){
+    if (!el) {
       el = document.createElement("div");
       el.id = "eaToast";
-      el.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(10,16,30,.92);border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.45);color:#fff;padding:10px 14px;border-radius:12px;font-weight:600;z-index:9999;opacity:0;transition:opacity .18s ease";
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(10,16,30,.92);border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.45);color:#fff;padding:10px 14px;border-radius:12px;font-weight:600;z-index:9999;opacity:0;transition:opacity .18s ease";
       document.body.appendChild(el);
     }
     el.textContent = msg;
     el.style.opacity = "1";
     clearTimeout(el._t);
-    el._t = setTimeout(()=>{ el.style.opacity="0"; }, 1400);
+    el._t = setTimeout(() => {
+      el.style.opacity = "0";
+    }, 1400);
   }
 
-  function scrollToResult(){
+  function scrollToResult() {
     const resultBox = $("resultBox");
     if (!resultBox) return;
     resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  // ---------- NAV (NULL-SAFE!) ----------
+  const btnHome = $("btnHome");
+  const btnCalc = $("btnCalc");
+  const btn3d = $("btn3d");
+  const btnDocs = $("btnDocs");
+
+  const viewHome = $("viewHome");
+  const viewCalc = $("viewCalc");
+  const view3d = $("view3d");
+  const viewDocs = $("viewDocs");
+
+  const homeGoCalc = $("homeGoCalc");
+  const homeGoDocs = $("homeGoDocs");
+
+  function setActive(btn) {
+    [btnHome, btnCalc, btn3d, btnDocs].forEach((b) => b && b.classList.remove("active"));
+    btn && btn.classList.add("active");
+  }
+
+  function showView(which) {
+    // Embedben lehet, hogy csak viewCalc létezik -> nem dőlünk el.
+    if (viewHome) viewHome.style.display = which === "home" ? "" : "none";
+    if (viewCalc) viewCalc.style.display = which === "calc" ? "" : "none";
+    if (view3d) view3d.style.display = which === "3d" ? "" : "none";
+    if (viewDocs) viewDocs.style.display = which === "docs" ? "" : "none";
+
+    if (which === "home") setActive(btnHome);
+    if (which === "calc") setActive(btnCalc);
+    if (which === "3d") setActive(btn3d);
+    if (which === "docs") setActive(btnDocs);
+
+    // frissítések
+    if (which === "docs") renderDocs();
+    if (which === "3d") updateHeatmap();
+
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (_) {}
+  }
+
+  // Nav clickek csak ha léteznek
+  if (btnHome) btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
+  if (btnCalc) btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  if (btn3d) btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
+  if (btnDocs) btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
+
+  if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
   // ---------- Material lambdas (W/mK) ----------
   const LAMBDA = {
@@ -282,39 +289,42 @@
   };
 
   function setDefaults() {
-    $("area").value = DEFAULTS.area;
-    $("storeys").value = String(DEFAULTS.storeys);
-    $("height").value = DEFAULTS.height;
-    $("wallType").value = DEFAULTS.wallType;
-    $("winRatio").value = DEFAULTS.winRatio;
-    $("nAir").value = DEFAULTS.nAir;
+    // Ha embedben hiányozna néhány mező, ne haljunk el.
+    const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
 
-    $("wallInsNow").value = DEFAULTS.wallInsNow;
-    $("wallInsMat").value = DEFAULTS.wallInsMat;
-    $("roofInsNow").value = DEFAULTS.roofInsNow;
-    $("roofInsMat").value = DEFAULTS.roofInsMat;
-    $("floorInsNow").value = DEFAULTS.floorInsNow;
-    $("floorInsMat").value = DEFAULTS.floorInsMat;
+    setVal("area", DEFAULTS.area);
+    setVal("storeys", String(DEFAULTS.storeys));
+    setVal("height", DEFAULTS.height);
+    setVal("wallType", DEFAULTS.wallType);
+    setVal("winRatio", DEFAULTS.winRatio);
+    setVal("nAir", DEFAULTS.nAir);
 
-    $("heatingNow").value = DEFAULTS.heatingNow;
-    $("scopNow").value = DEFAULTS.scopNow;
-    $("annualCostNow").value = DEFAULTS.annualCostNow;
+    setVal("wallInsNow", DEFAULTS.wallInsNow);
+    setVal("wallInsMat", DEFAULTS.wallInsMat);
+    setVal("roofInsNow", DEFAULTS.roofInsNow);
+    setVal("roofInsMat", DEFAULTS.roofInsMat);
+    setVal("floorInsNow", DEFAULTS.floorInsNow);
+    setVal("floorInsMat", DEFAULTS.floorInsMat);
 
-    $("wallInsTarget").value = DEFAULTS.wallInsTarget;
-    $("roofInsTarget").value = DEFAULTS.roofInsTarget;
-    $("floorInsTarget").value = DEFAULTS.floorInsTarget;
-    $("heatingTarget").value = DEFAULTS.heatingTarget;
-    $("scopTarget").value = DEFAULTS.scopTarget;
+    setVal("heatingNow", DEFAULTS.heatingNow);
+    setVal("scopNow", DEFAULTS.scopNow);
+    setVal("annualCostNow", DEFAULTS.annualCostNow);
 
-    $("hdd").value = DEFAULTS.hdd;
-    $("priceGas").value = DEFAULTS.priceGas;
-    $("priceEl").value = DEFAULTS.priceEl;
+    setVal("wallInsTarget", DEFAULTS.wallInsTarget);
+    setVal("roofInsTarget", DEFAULTS.roofInsTarget);
+    setVal("floorInsTarget", DEFAULTS.floorInsTarget);
+    setVal("heatingTarget", DEFAULTS.heatingTarget);
+    setVal("scopTarget", DEFAULTS.scopTarget);
 
-    $("bridge").value = DEFAULTS.bridge;
-    $("costWallM2").value = DEFAULTS.costWallM2;
-    $("costRoofM2").value = DEFAULTS.costRoofM2;
-    $("costFloorM2").value = DEFAULTS.costFloorM2;
-    $("costHeating").value = DEFAULTS.costHeating;
+    setVal("hdd", DEFAULTS.hdd);
+    setVal("priceGas", DEFAULTS.priceGas);
+    setVal("priceEl", DEFAULTS.priceEl);
+
+    setVal("bridge", DEFAULTS.bridge);
+    setVal("costWallM2", DEFAULTS.costWallM2);
+    setVal("costRoofM2", DEFAULTS.costRoofM2);
+    setVal("costFloorM2", DEFAULTS.costFloorM2);
+    setVal("costHeating", DEFAULTS.costHeating);
   }
 
   // ---------- Kalkulátor állapot (input lista) ----------
@@ -361,7 +371,6 @@
   }
 
   function b64urlEncode(str){
-    // UTF-8 safe
     const utf8 = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
       String.fromCharCode(parseInt(p1, 16))
     );
@@ -410,7 +419,6 @@
         return true;
       }
     }catch(_){}
-    // fallback
     try{
       const ta = document.createElement("textarea");
       ta.value = text;
@@ -450,42 +458,45 @@
 
   // ---------- Core calc ----------
   function readInputs() {
-    const area = clamp(num($("area").value, 100), 20, 1000);
-    const storeys = clamp(num($("storeys").value, 1), 1, 3);
-    const height = clamp(num($("height").value, 2.6), 2.2, 3.2);
-    const wallType = $("wallType").value;
+    // Ha embedben hiányzik valami input, azonnal derüljön ki – de ne crasheljen.
+    const val = (id, fallback) => $(id) ? $(id).value : fallback;
 
-    const winRatio = clamp(num($("winRatio").value, 18), 5, 35);
-    const nAir = clamp(num($("nAir").value, 0.6), 0.2, 1.2);
+    const area = clamp(num(val("area", 100), 100), 20, 1000);
+    const storeys = clamp(num(val("storeys", 1), 1), 1, 3);
+    const height = clamp(num(val("height", 2.6), 2.6), 2.2, 3.2);
+    const wallType = val("wallType", "brick");
 
-    const wallInsNow = clamp(num($("wallInsNow").value, 0), 0, 50);
-    const wallInsMat = $("wallInsMat").value;
-    const roofInsNow = clamp(num($("roofInsNow").value, 0), 0, 120);
-    const roofInsMat = $("roofInsMat").value;
-    const floorInsNow = clamp(num($("floorInsNow").value, 0), 0, 30);
-    const floorInsMat = $("floorInsMat").value;
+    const winRatio = clamp(num(val("winRatio", 18), 18), 5, 35);
+    const nAir = clamp(num(val("nAir", 0.6), 0.6), 0.2, 1.2);
 
-    const heatingNow = $("heatingNow").value;
-    const scopNow = clamp(num($("scopNow").value, 3.2), 2.2, 5.5);
-    const annualCostNow = Math.max(0, num($("annualCostNow").value, 0));
+    const wallInsNow = clamp(num(val("wallInsNow", 0), 0), 0, 50);
+    const wallInsMat = val("wallInsMat", "eps");
+    const roofInsNow = clamp(num(val("roofInsNow", 0), 0), 0, 120);
+    const roofInsMat = val("roofInsMat", "rockwool");
+    const floorInsNow = clamp(num(val("floorInsNow", 0), 0), 0, 30);
+    const floorInsMat = val("floorInsMat", "xps");
 
-    const wallInsTarget = clamp(num($("wallInsTarget").value, 15), 0, 50);
-    const roofInsTarget = clamp(num($("roofInsTarget").value, 25), 0, 120);
-    const floorInsTarget = clamp(num($("floorInsTarget").value, 10), 0, 30);
+    const heatingNow = val("heatingNow", "gas_old");
+    const scopNow = clamp(num(val("scopNow", 3.2), 3.2), 2.2, 5.5);
+    const annualCostNow = Math.max(0, num(val("annualCostNow", 0), 0));
 
-    const heatingTarget = $("heatingTarget").value;
-    const scopTarget = clamp(num($("scopTarget").value, 3.6), 2.2, 5.5);
+    const wallInsTarget = clamp(num(val("wallInsTarget", 15), 15), 0, 50);
+    const roofInsTarget = clamp(num(val("roofInsTarget", 25), 25), 0, 120);
+    const floorInsTarget = clamp(num(val("floorInsTarget", 10), 10), 0, 30);
 
-    const hdd = clamp(num($("hdd").value, 3000), 1800, 4500);
-    const priceGas = clamp(num($("priceGas").value, 40), 10, 120);
-    const priceEl = clamp(num($("priceEl").value, 70), 20, 180);
+    const heatingTarget = val("heatingTarget", "hp");
+    const scopTarget = clamp(num(val("scopTarget", 3.6), 3.6), 2.2, 5.5);
 
-    const bridge = clamp(num($("bridge").value, 10), 0, 25);
+    const hdd = clamp(num(val("hdd", 3000), 3000), 1800, 4500);
+    const priceGas = clamp(num(val("priceGas", 40), 40), 10, 120);
+    const priceEl = clamp(num(val("priceEl", 70), 70), 20, 180);
 
-    const costWallM2 = Math.max(0, num($("costWallM2").value, 18000));
-    const costRoofM2 = Math.max(0, num($("costRoofM2").value, 12000));
-    const costFloorM2 = Math.max(0, num($("costFloorM2").value, 15000));
-    const costHeating = Math.max(0, num($("costHeating").value, 3500000));
+    const bridge = clamp(num(val("bridge", 10), 10), 0, 25);
+
+    const costWallM2 = Math.max(0, num(val("costWallM2", 18000), 18000));
+    const costRoofM2 = Math.max(0, num(val("costRoofM2", 12000), 12000));
+    const costFloorM2 = Math.max(0, num(val("costFloorM2", 15000), 15000));
+    const costHeating = Math.max(0, num(val("costHeating", 3500000), 3500000));
 
     return {
       area, storeys, height, wallType,
@@ -517,6 +528,7 @@
   }
 
   function renderResult(out) {
+    if (!resultBox) return;
     resultBox.innerHTML = out;
   }
 
@@ -679,9 +691,9 @@
     if ((location.hash || "").includes("3d")) updateHeatmap();
   }
 
-  // events
-  btnRun.addEventListener("click", () => { flashBtn(btnRun); calcAll(); toast("Kész — frissítve."); scrollToResult(); });
-  btnReset.addEventListener("click", () => {
+  // events (NULL-SAFE)
+  if (btnRun) btnRun.addEventListener("click", () => { flashBtn(btnRun); calcAll(); toast("Kész — frissítve."); scrollToResult(); });
+  if (btnReset) btnReset.addEventListener("click", () => {
     flashBtn(btnReset);
     setDefaults();
     toast("Alapértékek visszaállítva.");
@@ -692,7 +704,7 @@
     if ((location.hash || "").includes("3d")) updateHeatmap();
   });
 
-  // ---------- TUDÁSTÁR ----------
+  // ---------- TUDÁSTÁR (JAVÍTVA: chip bind + 1 aktív) ----------
   const DOCS = [
     {
       id: "hdd",
@@ -711,12 +723,26 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
 
   let docFilterCat = "Összes";
   let docSearch = "";
-  let docSelectedId = DOCS[0].id;
+  let docSelectedId = (DOCS[0] && DOCS[0].id) ? DOCS[0].id : null;
 
-  function setDocChipActive(btn) {
-    const ids = ["docChipAll","docChipBasics","docChipIns","docChipHeat","docChipMist","docChipList"];
-    ids.forEach(i => $(i)?.classList.remove("active"));
-    btn?.classList.add("active");
+  function getDocChips(){
+    // Támogatjuk: id^="docChip" vagy data-doc-cat
+    const byId = Array.from(document.querySelectorAll('[id^="docChip"]'));
+    const byData = Array.from(document.querySelectorAll('[data-doc-cat]'));
+    return Array.from(new Set([...byId, ...byData]));
+  }
+
+  function getChipCategory(el){
+    const dc = (el?.dataset?.docCat || "").trim();
+    if (dc) return dc;
+    if (el?.id === "docChipAll") return "Összes";
+    const txt = (el?.textContent || "").trim();
+    return txt || "Összes";
+  }
+
+  function setDocChipActive(activeEl){
+    getDocChips().forEach(c => c.classList.remove("active"));
+    if (activeEl) activeEl.classList.add("active");
   }
 
   function renderDocs() {
@@ -731,18 +757,17 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
       const catOk = (docFilterCat === "Összes") ? true : d.cat === docFilterCat;
       if (!catOk) return false;
       if (!q) return true;
-      return (
-        d.title.toLowerCase().includes(q) ||
-        d.body.toLowerCase().includes(q) ||
-        d.tags.join(" ").toLowerCase().includes(q)
-      );
+
+      const text = `${d.title} ${d.body} ${(d.tags||[]).join(" ")}`.toLowerCase();
+      return text.includes(q);
     });
 
-    countEl && (countEl.textContent = String(filtered.length));
+    if (countEl) countEl.textContent = String(filtered.length);
 
-    if (!filtered.some(d => d.id === docSelectedId) && filtered.length) {
-      docSelectedId = filtered[0].id;
+    if (docSelectedId && !filtered.some(d => d.id === docSelectedId)) {
+      docSelectedId = filtered[0]?.id || null;
     }
+    if (!docSelectedId && filtered[0]) docSelectedId = filtered[0].id;
 
     listEl.innerHTML = filtered.map(d => {
       const active = d.id === docSelectedId ? "active" : "";
@@ -775,12 +800,31 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
     if (searchEl) searchEl.value = docSearch;
   }
 
-  $("docSearch")?.addEventListener("input", (e) => {
-    docSearch = e.target.value || "";
-    renderDocs();
-  });
+  // Kereső
+  const docSearchEl = $("docSearch");
+  if (docSearchEl) {
+    docSearchEl.addEventListener("input", (e) => {
+      docSearch = e.target.value || "";
+      renderDocs();
+    });
+  }
 
-  $("docChipAll")?.addEventListener("click", () => { docFilterCat = "Összes"; setDocChipActive($("docChipAll")); renderDocs(); });
+  // Chip-ek (mind)
+  (function bindDocChips(){
+    const chips = getDocChips();
+    chips.forEach(chip => {
+      chip.addEventListener("click", () => {
+        docFilterCat = getChipCategory(chip);
+        docSelectedId = null; // UX: szűrésnél ugorjon az első találatra
+        setDocChipActive(chip);
+        renderDocs();
+      });
+    });
+
+    // Alapértelmezett aktív chip: Összes
+    const chipAll = $("docChipAll") || chips.find(c => getChipCategory(c) === "Összes") || null;
+    if (chipAll) setDocChipActive(chipAll);
+  })();
 
   // ---------- HEATMAP (MVP) ----------
   let hmMode = "now"; // now | target | delta
@@ -928,9 +972,18 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
   // ---------- initByHash (share betöltéssel) ----------
   function initByHash() {
     const { view } = parseHash();
+
+    // Ha embed page és csak a kalkulátor view létezik, mindig calc
+    const onlyCalcExists = !!viewCalc && !viewHome && !view3d && !viewDocs;
+
+    if (onlyCalcExists) {
+      showView("calc");
+      tryApplyShareFromUrl();
+      return;
+    }
+
     if (view === "calc") {
       showView("calc");
-      // ha share van: betöltjük
       tryApplyShareFromUrl();
       return;
     }
@@ -941,51 +994,50 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
 
   // ---------- START ----------
   setDefaults();
-  bindShareButton();     // Megosztás gomb kötése
+  bindShareButton();
   initByHash();
   window.addEventListener("hashchange", initByHash);
-   // ===== SZAKIPIAC LEAD (postMessage + fallback) =====
-(function bindLeadButton(){
-  const btnLead = document.getElementById("btnLead");
-  if (!btnLead) return;
 
-  function safeState(){
-    // A legegyszerűbb: a jelenlegi input értékeket elküldjük
-    // (A readInputs() nálad már létezik)
-    return readInputs();
-  }
+  // ===== SZAKIPIAC LEAD (postMessage + fallback) =====
+  (function bindLeadButton(){
+    const btnLead = document.getElementById("btnLead");
+    if (!btnLead) return;
 
-  function buildShareUrlFallback(state){
-    // egyszerű fallback link (ha kell)
-    const json = JSON.stringify(state);
-    const b64 = btoa(unescape(encodeURIComponent(json)))
-      .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
-    const base = location.origin + location.pathname.replace(/\/embed\.html$/, "/index.html");
-    return `${base}#calc&s=${b64}`;
-  }
+    function safeState(){
+      return readInputs();
+    }
 
-  btnLead.addEventListener("click", () => {
-    const state = safeState();
-    const payload = {
-      app: "EnergiaAdvisor3D",
-      ts: Date.now(),
-      state,
-      shareUrl: buildShareUrlFallback(state),
-      from: location.href
-    };
-
-    // 1) küldés a befogadó oldalnak (SzakiPiac)
-    try {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: "EA3D_LEAD", payload }, "*");
-        alert("Elküldve a SzakiPiacnak ✅");
-        return;
+    function buildShareUrlFallback(state){
+      // Itt igazítjuk a te share formátumodra: #calc&share=...
+      try{
+        const token = b64urlEncode(JSON.stringify(state));
+        const base = location.origin + location.pathname.replace(/\/embed\.html$/, "/index.html");
+        return `${base}#calc&share=${encodeURIComponent(token)}`;
+      }catch(_){
+        return location.href;
       }
-    } catch (e) {}
+    }
 
-    // 2) ha nem iframe-ben fut, akkor csak megnyitjuk a lead oldalt (majd később)
-    alert("Nem beágyazott módban fut. Lead oldal még nincs kész (következő lépés).");
-  });
-})();
+    btnLead.addEventListener("click", () => {
+      const state = safeState();
+      const payload = {
+        app: "EnergiaAdvisor3D",
+        ts: Date.now(),
+        state,
+        shareUrl: buildShareUrlFallback(state),
+        from: location.href
+      };
+
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: "EA3D_LEAD", payload }, "*");
+          alert("Elküldve a SzakiPiacnak ✅");
+          return;
+        }
+      } catch (e) {}
+
+      alert("Nem beágyazott módban fut. Lead oldal még nincs kész (következő lépés).");
+    });
+  })();
 
 })();
