@@ -825,11 +825,16 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
       tags: ["kivitelező", "kérdések", "minőség"],
       title: "10 kérdés kivitelezőnek, hogy ne bukj a részleteken",
       body: `
-1) Milyen rétegrendet javasolsz és miért?<br/>
-2) Lábazat/koszorú/csomópontok megoldása hogyan lesz?<br/>
-3) Milyen ragasztó-háló-dübel rendszerrel dolgozol?<br/>
-4) Milyen pára- és szellőzés javasolt a munka után?<br/>
-5) Mit vállalsz garanciában írásban?<br/><br/>
+1) Milyen csomóponti megoldást adsz koszorúnál/lábazatnál?<br/>
+2) Mivel ragasztasz, dűbelezés hogyan lesz?<br/>
+3) Párazárás/páratechnika: hol kritikus?<br/>
+4) Milyen vastagságot miért javasolsz?<br/>
+5) Milyen hálózás, élvédő, indítóprofil lesz?<br/>
+6) Milyen minőségű anyagot hozol (márka, rendszer)?<br/>
+7) Fotózod-e a rétegrendet kivitelezés közben?<br/>
+8) Garancia mire és mennyi?<br/>
+9) Mikor fizetek és milyen ütemezéssel?<br/>
+10) Mi a leggyakoribb hibapont ennél a háznál?
 <b>Tipp:</b> ha erre bizonytalan válaszokat kapsz, az már jel.
       `.trim()
     }
