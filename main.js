@@ -944,5 +944,48 @@ Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<b
   bindShareButton();     // Megosztás gomb kötése
   initByHash();
   window.addEventListener("hashchange", initByHash);
+   // ===== SZAKIPIAC LEAD (postMessage + fallback) =====
+(function bindLeadButton(){
+  const btnLead = document.getElementById("btnLead");
+  if (!btnLead) return;
+
+  function safeState(){
+    // A legegyszerűbb: a jelenlegi input értékeket elküldjük
+    // (A readInputs() nálad már létezik)
+    return readInputs();
+  }
+
+  function buildShareUrlFallback(state){
+    // egyszerű fallback link (ha kell)
+    const json = JSON.stringify(state);
+    const b64 = btoa(unescape(encodeURIComponent(json)))
+      .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"");
+    const base = location.origin + location.pathname.replace(/\/embed\.html$/, "/index.html");
+    return `${base}#calc&s=${b64}`;
+  }
+
+  btnLead.addEventListener("click", () => {
+    const state = safeState();
+    const payload = {
+      app: "EnergiaAdvisor3D",
+      ts: Date.now(),
+      state,
+      shareUrl: buildShareUrlFallback(state),
+      from: location.href
+    };
+
+    // 1) küldés a befogadó oldalnak (SzakiPiac)
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "EA3D_LEAD", payload }, "*");
+        alert("Elküldve a SzakiPiacnak ✅");
+        return;
+      }
+    } catch (e) {}
+
+    // 2) ha nem iframe-ben fut, akkor csak megnyitjuk a lead oldalt (majd később)
+    alert("Nem beágyazott módban fut. Lead oldal még nincs kész (következő lépés).");
+  });
+})();
 
 })();
