@@ -695,19 +695,142 @@
     if ((location.hash || "").includes("3d")) updateHeatmap();
   });
 
-  // ---------- TUDÁSTÁR (JAVÍTVA: chip bind + 1 aktív) ----------
+  // ---------- TUDÁSTÁR (TELI + működő kategóriák) ----------
   const DOCS = [
     {
       id: "hdd",
       cat: "Alapok",
       read: "~3 perc",
-      tags: ["HDD", "alapok"],
+      tags: ["HDD", "fűtés", "alapok"],
       title: "Mi az a HDD (fűtési foknap) és miért számít?",
       body: `
 A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.
 Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<br/><br/>
 <b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/>
 <b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.
+      `.trim()
+    },
+    {
+      id: "uvalue",
+      cat: "Alapok",
+      read: "~4 perc",
+      tags: ["U-érték", "hőveszteség", "fal"],
+      title: "U-érték egyszerűen: mit jelent és mitől lesz jobb?",
+      body: `
+Az <b>U-érték</b> (W/m²K) megmutatja, mennyi hő “szökik át” 1 m² szerkezeten 1°C különbségnél.<br/><br/>
+<b>Kisebb U = jobb.</b> Szigetelésnél általában a fal/födém U-értéke csökken látványosan.<br/><br/>
+A kalkulátor “régi” tipikus U-ból indul, és a megadott cm + anyag alapján számolja a javulást.
+      `.trim()
+    },
+    {
+      id: "airchange",
+      cat: "Alapok",
+      read: "~3 perc",
+      tags: ["légcsere", "infiltráció", "szellőzés"],
+      title: "Légcsere (1/h): miért tud elvinni rengeteg pénzt?",
+      body: `
+A légcsere a ház “szivárgását” jelzi: rések, rossz nyílászáró, kéményhatás.<br/><br/>
+A hőveszteség része: <b>Hvent = 0,33 × n × térfogat</b> (W/K).<br/><br/>
+<b>Gyakorlat:</b> hiába szigetelsz, ha a ház “huzatos”, a megtakarítás kisebb lesz. Ezért van külön blokk a 3D nézetben is.
+      `.trim()
+    },
+    {
+      id: "roof_first",
+      cat: "Szigetelés",
+      read: "~4 perc",
+      tags: ["födém", "padlás", "megtérülés"],
+      title: "Miért a födém/padlás szigetelés szokott a legjobb első lépés lenni?",
+      body: `
+A meleg levegő felfelé száll, ezért a födém sok háznál “fő veszteségcsatorna”.<br/><br/>
+<b>Előny:</b> gyors kivitelezés, sokszor olcsóbb, és már 20–30 cm jó anyaggal látványos eredményt ad.<br/><br/>
+A kalkulátorban próbáld: csak a födémet állítsd CÉL-ra → nézd meg a Prioritás listában.
+      `.trim()
+    },
+    {
+      id: "wall_eps_rw",
+      cat: "Szigetelés",
+      read: "~5 perc",
+      tags: ["EPS", "kőzetgyapot", "fal"],
+      title: "EPS vagy kőzetgyapot? Rövid döntési szempontok",
+      body: `
+<b>EPS:</b> jó ár/érték, könnyű, elterjedt. <b>Kőzetgyapot:</b> jobb pára- és tűztechnika, jó hanggátlás.<br/><br/>
+A hőszigetelés szempontjából mindkettő jó lehet, a különbséget gyakran a részletek adják: ragasztás, dübelezés, hálózás, lábazat, csomópontok.<br/><br/>
+Tipp: ha “hőhíd” problémád van, a kivitelezés minősége többet számít, mint az anyag neve.
+      `.trim()
+    },
+    {
+      id: "floor",
+      cat: "Szigetelés",
+      read: "~4 perc",
+      tags: ["padló", "aljzat", "XPS"],
+      title: "Padló/aljzat szigetelés: mikor éri meg?",
+      body: `
+Padló szigetelés akkor ad nagyot, ha alatta hideg tér van (pince, szellőző légrés, talaj felől hideg).<br/><br/>
+Felújításnál gyakori, hogy bontással jár → ezért a megtérülés változó.<br/><br/>
+A kalkulátorban külön “csak padló” összehasonlítással látod, mennyi Ft/év jön ki belőle.
+      `.trim()
+    },
+    {
+      id: "boiler_vs_hp",
+      cat: "Fűtés",
+      read: "~5 perc",
+      tags: ["kazán", "hőszivattyú", "SCOP"],
+      title: "Kazáncsere vagy hőszivattyú? Miért fontos a SCOP?",
+      body: `
+Hőszivattyúnál a <b>SCOP</b> az éves átlagos hatásfokot jelzi: mennyi hő lesz 1 kWh villanyból.<br/><br/>
+<b>Példa:</b> SCOP 3,6 → 1 kWh villanyból ~3,6 kWh hő.<br/><br/>
+Fontos: ha a ház nincs rendben (szigetelés/légzárás), a fűtéscsere önmagában sokszor kevésbé “üt”, mint gondolnád.
+      `.trim()
+    },
+    {
+      id: "cond_boiler",
+      cat: "Fűtés",
+      read: "~3 perc",
+      tags: ["kondenz", "kazán", "hatásfok"],
+      title: "Kondenzációs kazán: mikor hoz látványos javulást?",
+      body: `
+Régi kazánhoz képest a kondenzációs kazán hatásfoka jobb, főleg alacsonyabb előremenő hőmérsékleten.<br/><br/>
+<b>Ha radiátor + magas előremenő</b> van, a különbség lehet kisebb, mint padlófűtésnél.<br/><br/>
+A kalkulátorban: állítsd MOST = régi kazán, CÉL = kondenz → nézd meg a “csak fűtés” hatást.
+      `.trim()
+    },
+    {
+      id: "thermal_bridges",
+      cat: "Tipikus hibák",
+      read: "~4 perc",
+      tags: ["hőhíd", "csomópont", "penész"],
+      title: "Hőhidak: miért lehet penész akkor is, ha szigeteltél?",
+      body: `
+A hőhíd olyan pont, ahol a hő “könnyebben” távozik (koszorú, áthidaló, erkélylemez, lábazat, csatlakozások).<br/><br/>
+Ha a felület lehűl, kicsapódhat a pára → penész kockázat.<br/><br/>
+Ezért van a kalkulátorban <b>hőhíd korrekció</b>: ha sok a csomóponti hiba, a valós megtakarítás kisebb lehet.
+      `.trim()
+    },
+    {
+      id: "air_sealing_mistake",
+      cat: "Tipikus hibák",
+      read: "~3 perc",
+      tags: ["légzárás", "huzat", "szalag"],
+      title: "Tipikus hiba: szigetelés van, de a ház továbbra is “huzatos”",
+      body: `
+Szigetelés mellett is elmehet a hő, ha nincs légzárás: rossz ablakbeépítés, rések, padlásfeljáró, kémény környéke.<br/><br/>
+<b>Gyors ellenőrzés:</b> hideg napon kézzel/füsttel érezhető-e áramlás a kritikus helyeken?<br/><br/>
+A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyásol mindent.
+      `.trim()
+    },
+    {
+      id: "questions_for_contractor",
+      cat: "Kérdéslista",
+      read: "~5 perc",
+      tags: ["kivitelező", "kérdések", "minőség"],
+      title: "10 kérdés kivitelezőnek, hogy ne bukj a részleteken",
+      body: `
+1) Milyen rétegrendet javasolsz és miért?<br/>
+2) Lábazat/koszorú/csomópontok megoldása hogyan lesz?<br/>
+3) Milyen ragasztó-háló-dübel rendszerrel dolgozol?<br/>
+4) Milyen pára- és szellőzés javasolt a munka után?<br/>
+5) Mit vállalsz garanciában írásban?<br/><br/>
+<b>Tipp:</b> ha erre bizonytalan válaszokat kapsz, az már jel.
       `.trim()
     }
   ];
