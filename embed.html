@@ -4,56 +4,80 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Energia Advisor 3D – Kalkulátor (Embed)</title>
+
   <link rel="stylesheet" href="style.css" />
+
   <style>
-    /* EMBED mód: nincs fejléc/nav, nincs extra margó */
-    body { padding-top: 0 !important; }
-    header, .topbar, .nav, .navRight, .navPills { display:none !important; }
-    .page { padding-top: 16px !important; }
-    .container { max-width: 1100px; }
+    /* EMBED mód */
+    body.embed {
+      padding-top: 0 !important;
+      margin: 0;
+    }
+
+    body.embed header,
+    body.embed .topbar,
+    body.embed .nav,
+    body.embed .navRight,
+    body.embed .navPills {
+      display: none !important;
+    }
+
+    .page {
+      padding-top: 20px !important;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
   </style>
 </head>
+
 <body class="embed">
-  <!-- ugyanaz a tartalom, mint az index.html-ben, csak nav nélkül -->
+
   <div class="page">
     <div class="container">
-      <!-- Kalkulátor nézet: ugyanazokat az ID-ket hagyd meg, mert a main.js ezeket használja -->
-      <section id="viewCalc">
-        <h2 class="h2">Energia kalkulátor (Jelenlegi → Cél)</h2>
-        <div class="muted">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</div>
 
-        <!-- Gombok (ha nálad más a class, nem gond – az ID-k a fontosak) -->
-        <div class="calcBtns" style="margin-top:12px;">
+      <section id="viewCalc">
+
+        <h2 class="h2">Energia kalkulátor (Jelenlegi → Cél)</h2>
+        <div class="muted">
+          Add meg a mostani állapotot és a cél állapotot.
+        </div>
+
+        <div class="calcBtns" style="margin-top:16px;">
           <button id="btnCalcRun" class="btn primary">Elemzés</button>
           <button id="btnReset" class="btn ghost">Alapértékek</button>
           <button id="btnShare" class="btn ghost">Megosztás</button>
           <button id="btnLead" class="btn primary">Ajánlatkérés szakiktól</button>
-
-          <!-- EZ AZ ÚJ: lead gomb -->
-          <button id="btnLead" class="btn primary">Ajánlatkérés szakiktól</button>
         </div>
 
-        <!-- Itt alatta ugyanaz a kalkulátor UI legyen, mint index.html-ben -->
-        <!-- A legegyszerűbb: innen lefelé MÁSOLD be az index.html-ből a teljes kalkulátor blokkot
-             (a két oszlopos űrlapot + resultBox-ot), változtatás nélkül. -->
+        <!-- FONTOS:
+             IDE BE KELL MÁSOLNOD az index.html-ből
+             a TELJES kalkulátor űrlap blokkot
+             változtatás nélkül.
+        -->
 
-        <!-- ⬇⬇⬇ IDE PONTOSAN AZ A BLOKK JÖN, AMI NÁLAD MOST IS VAN A KALKULÁTORBAN ⬇⬇⬇ -->
-
-        <!-- Példa horgony: resultBox kötelező -->
-        <div id="resultBox" class="result" style="margin-top:16px;">
+        <div id="resultBox" class="result" style="margin-top:20px;">
           <div class="sectionTitle">Eredmény</div>
-          <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+          <div class="muted">
+            Kattints az <b>Elemzés</b> gombra.
+          </div>
         </div>
 
-        <!-- ⬆⬆⬆ KALKULÁTOR BLOKK VÉGE ⬆⬆⬆ -->
       </section>
+
     </div>
   </div>
 
   <script src="main.js"></script>
+
   <script>
-    // Embedben alapból a kalkulátort mutassuk (ha a main.js hash alapján vált)
-    if (!location.hash) location.hash = "#calc";
+    // Ha nincs hash, automatikusan kalkulátorra áll
+    if (!location.hash) {
+      location.hash = "#calc";
+    }
   </script>
+
 </body>
 </html>
