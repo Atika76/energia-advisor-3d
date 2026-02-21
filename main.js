@@ -9,8 +9,13 @@
 (function () {
   const $ = (id) => document.getElementById(id);
 
-  // ✅ CÉL: mindig vissza a SzakiPiac főoldalára
+  // =========================
+  // SZAKIPIAC VISSZA – KÖZÖS
+  // =========================
   const SZAKIPIAC_HOME_URL = "https://szakipiac-2025.hu/#home";
+  function goToSzakipiacHome() {
+    window.location.href = SZAKIPIAC_HOME_URL;
+  }
 
   // ---------- Helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -117,6 +122,60 @@
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
+  // ================================
+  // VISSZA A SZAKIPIA CRA GOMB – X HELYRE, NAV STÍLUSBAN
+  // ================================
+  function addBackToSzakipiacButton() {
+    if (document.getElementById("eaBackToSzakipiac")) return;
+
+    const refBtn =
+      document.getElementById("btnHome") ||
+      document.getElementById("btnCalc") ||
+      document.getElementById("btn3d") ||
+      document.getElementById("btnDocs");
+
+    if (!refBtn) return;
+
+    const navGroup = refBtn.parentElement;        // Kezdő / Kalkulátor / stb konténer
+    const topBar = navGroup && navGroup.parentElement; // teljes felső sáv (brand + nav)
+    if (!topBar || !navGroup) return;
+
+    // Gomb
+    const a = document.createElement("a");
+    a.id = "eaBackToSzakipiac";
+    a.href = SZAKIPIAC_HOME_URL;
+    a.textContent = "← Vissza a SzakiPiacra";
+
+    // Ugyanaz a stílus mint a többi felső gomb
+    a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
+
+    // Biztonsági alap stílus, ha a refBtn class üres
+    if (!a.className) {
+      a.style.cssText = `
+        display:inline-flex;
+        align-items:center;
+        padding:10px 16px;
+        border-radius:999px;
+        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.15);
+        color:#eaf2ff;
+        text-decoration:none;
+        font-weight:600;
+        backdrop-filter: blur(6px);
+      `;
+    }
+
+    // X hely: a bal oldali cím/rész után, a jobb oldali nav gombok elé
+    // (topBar flex sorba beszúrjuk a navGroup elé)
+    topBar.insertBefore(a, navGroup);
+
+    // Ne nyomja rá a címre: rugalmasan középre tolja magát,
+    // de a nav marad jobbra.
+    a.style.marginLeft = "16px";
+    a.style.marginRight = "16px";
+    a.style.whiteSpace = "nowrap";
+  }
+
   // ---------- Material lambdas (W/mK) ----------
   const LAMBDA = {
     eps: 0.037,
@@ -209,11 +268,9 @@
     } else {
       const eff = HEAT[heatingType].eff;
       const gasKwh = costFt / Math.max(priceGas, 1e-6);
-      return gaskwhFix(gasKwh) * eff;
+      return gasKwh * eff;
     }
   }
-  // ✅ kis védelem: ha valahol elíródik a változónév, ne omoljon össze
-  function gaskwhFix(v){ return Number.isFinite(v) ? v : 0; }
 
   function computeScenario(params) {
     const {
@@ -1109,100 +1166,28 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
     return showView("home");
   }
 
-  // ✅ FIX: felső “Vissza a SzakiPiacra” gomb
-  function addBackToSzakipiacButton(){
-    // ha már létezik, ne rakjuk be mégegyszer
-    if (document.getElementById("eaBackToSzakipiac")) return;
-
-    const a = document.createElement("a");
-    a.id = "eaBackToSzakipiac";
-    a.href = SZAKIPIAC_HOME_URL;
-    a.textContent = "⬅ Vissza a SzakiPiacra";
-
-    a.style.position = "fixed";
-    a.style.top = "16px";
-    a.style.left = "16px";
-    a.style.zIndex = "9999";
-    a.style.padding = "10px 14px";
-    a.style.borderRadius = "12px";
-    a.style.background = "rgba(255,255,255,0.88)";
-    a.style.border = "1px solid rgba(0,0,0,0.10)";
-    a.style.boxShadow = "0 10px 25px rgba(0,0,0,0.16)";
-    a.style.backdropFilter = "blur(8px)";
-    a.style.webkitBackdropFilter = "blur(8px)";
-    a.style.color = "#0f172a";
-    a.style.textDecoration = "none";
-    a.style.fontWeight = "700";
-    a.style.fontSize = "13px";
-    a.style.transition = "transform .15s ease, opacity .15s ease";
-
-    a.addEventListener("mouseover", () => a.style.transform = "translateY(-1px)");
-    a.addEventListener("mouseout",  () => a.style.transform = "translateY(0px)");
-    a.addEventListener("touchstart",() => a.style.opacity = "0.92", { passive:true });
-    a.addEventListener("touchend",  () => a.style.opacity = "1", { passive:true });
-
-    document.body.appendChild(a);
-  }
-
   // ---------- START ----------
   setDefaults();
   bindShareButton();
   initByHash();
   window.addEventListener("hashchange", initByHash);
 
-  // 🔥 ide tesszük be, hogy biztosan legyen body
+  // ✅ felső „Vissza a SzakiPiacra” gomb berakása az X helyre
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
   } else {
     addBackToSzakipiacButton();
   }
 
-  // ===== SZAKIPIAC LEAD (postMessage + fallback) =====
+  // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) – MOST MINDIG VISSZA A FŐOLDALRA =====
   (function bindLeadButton(){
     const btnLead = document.getElementById("btnLead");
     if (!btnLead) return;
 
-    function safeState(){
-      return readInputs();
-    }
-
-    function buildShareUrlFallback(state){
-      try{
-        const token = b64urlEncode(JSON.stringify(state));
-        const base = location.origin + location.pathname.replace(/\/embed\.html$/, "/index.html");
-        return `${base}#calc&share=${encodeURIComponent(token)}`;
-      }catch(_){
-        return location.href;
-      }
-    }
-
     btnLead.addEventListener("click", () => {
-      // ✅ 1) mindig vissza a SzakiPiac főoldalára
-      // (ha egyszer később lead oldalt akarsz, ide tudjuk visszahozni a postMessage-t)
-      try{
-        window.location.href = SZAKIPIAC_HOME_URL;
-        return;
-      }catch(_){}
-
-      // ✅ 2) ha valamiért nem ment: régi logika
-      const state = safeState();
-      const payload = {
-        app: "EnergiaAdvisor3D",
-        ts: Date.now(),
-        state,
-        shareUrl: buildShareUrlFallback(state),
-        from: location.href
-      };
-
-      try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: "EA3D_LEAD", payload }, "*");
-          alert("Elküldve a SzakiPiacnak ✅");
-          return;
-        }
-      } catch (e) {}
-
-      alert("Vissza a SzakiPiacra: " + SZAKIPIAC_HOME_URL);
+      flashBtn(btnLead);
+      toast("Vissza a SzakiPiacra…");
+      goToSzakipiacHome(); // ✅ mindig #home
     });
   })();
 
