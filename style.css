@@ -380,19 +380,7 @@ h1{
 
 .footerNote{margin-top:18px; color:rgba(233,239,255,0.60); text-align:center}
 
-/* --------- PRINT / PDF --------- */
-@media print{
-  .bg{display:none !important;}
-  .topbar{position:static; background:#0b1230 !important; border-bottom:1px solid #2b335a !important;}
-  .nav{display:none !important;}
-  .wrap{max-width:none; margin:0; padding:0;}
-  .card{box-shadow:none !important; backdrop-filter:none !important;}
-  .headBtns{display:none !important;}
-  .btn{display:none !important;}
-  .chipBtn{display:none !important;}
-  .hmModes .muted{display:none !important;}
-  .footerNote{display:none !important;}
-  /* ===== EMBED MÓD ===== */
+/* ===== EMBED MÓD (NEM PRINT!) ===== */
 body.embed header,
 body.embed nav,
 body.embed .nav,
@@ -416,4 +404,17 @@ body.embed #viewCalc {
 body.embed {
   padding-top: 0 !important;
 }
+
+/* --------- PRINT / PDF --------- */
+@media print{
+  .bg{display:none !important;}
+  .topbar{position:static; background:#0b1230 !important; border-bottom:1px solid #2b335a !important;}
+  .nav{display:none !important;}
+  .wrap{max-width:none; margin:0; padding:0;}
+  .card{box-shadow:none !important; backdrop-filter:none !important;}
+  .headBtns{display:none !important;}
+  .btn{display:none !important;}
+  .chipBtn{display:none !important;}
+  .hmModes .muted{display:none !important;}
+  .footerNote{display:none !important;}
 }
