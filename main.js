@@ -9,6 +9,9 @@
 (function () {
   const $ = (id) => document.getElementById(id);
 
+  // ✅ CÉL: mindig vissza a SzakiPiac főoldalára
+  const SZAKIPIAC_HOME_URL = "https://szakipiac-2025.hu/#home";
+
   // ---------- Helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const num = (v, fallback = 0) => {
@@ -206,9 +209,11 @@
     } else {
       const eff = HEAT[heatingType].eff;
       const gasKwh = costFt / Math.max(priceGas, 1e-6);
-      return gasKwh * eff;
+      return gaskwhFix(gasKwh) * eff;
     }
   }
+  // ✅ kis védelem: ha valahol elíródik a változónév, ne omoljon össze
+  function gaskwhFix(v){ return Number.isFinite(v) ? v : 0; }
 
   function computeScenario(params) {
     const {
@@ -1104,11 +1109,53 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
     return showView("home");
   }
 
+  // ✅ FIX: felső “Vissza a SzakiPiacra” gomb
+  function addBackToSzakipiacButton(){
+    // ha már létezik, ne rakjuk be mégegyszer
+    if (document.getElementById("eaBackToSzakipiac")) return;
+
+    const a = document.createElement("a");
+    a.id = "eaBackToSzakipiac";
+    a.href = SZAKIPIAC_HOME_URL;
+    a.textContent = "⬅ Vissza a SzakiPiacra";
+
+    a.style.position = "fixed";
+    a.style.top = "16px";
+    a.style.left = "16px";
+    a.style.zIndex = "9999";
+    a.style.padding = "10px 14px";
+    a.style.borderRadius = "12px";
+    a.style.background = "rgba(255,255,255,0.88)";
+    a.style.border = "1px solid rgba(0,0,0,0.10)";
+    a.style.boxShadow = "0 10px 25px rgba(0,0,0,0.16)";
+    a.style.backdropFilter = "blur(8px)";
+    a.style.webkitBackdropFilter = "blur(8px)";
+    a.style.color = "#0f172a";
+    a.style.textDecoration = "none";
+    a.style.fontWeight = "700";
+    a.style.fontSize = "13px";
+    a.style.transition = "transform .15s ease, opacity .15s ease";
+
+    a.addEventListener("mouseover", () => a.style.transform = "translateY(-1px)");
+    a.addEventListener("mouseout",  () => a.style.transform = "translateY(0px)");
+    a.addEventListener("touchstart",() => a.style.opacity = "0.92", { passive:true });
+    a.addEventListener("touchend",  () => a.style.opacity = "1", { passive:true });
+
+    document.body.appendChild(a);
+  }
+
   // ---------- START ----------
   setDefaults();
   bindShareButton();
   initByHash();
   window.addEventListener("hashchange", initByHash);
+
+  // 🔥 ide tesszük be, hogy biztosan legyen body
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
+  } else {
+    addBackToSzakipiacButton();
+  }
 
   // ===== SZAKIPIAC LEAD (postMessage + fallback) =====
   (function bindLeadButton(){
@@ -1130,6 +1177,14 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
     }
 
     btnLead.addEventListener("click", () => {
+      // ✅ 1) mindig vissza a SzakiPiac főoldalára
+      // (ha egyszer később lead oldalt akarsz, ide tudjuk visszahozni a postMessage-t)
+      try{
+        window.location.href = SZAKIPIAC_HOME_URL;
+        return;
+      }catch(_){}
+
+      // ✅ 2) ha valamiért nem ment: régi logika
       const state = safeState();
       const payload = {
         app: "EnergiaAdvisor3D",
@@ -1147,7 +1202,7 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
         }
       } catch (e) {}
 
-      alert("Nem beágyazott módban fut. Lead oldal még nincs kész (következő lépés).");
+      alert("Vissza a SzakiPiacra: " + SZAKIPIAC_HOME_URL);
     });
   })();
 
