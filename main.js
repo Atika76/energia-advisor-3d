@@ -6,7 +6,12 @@
    - LINKELHETŐ KALKULÁCIÓ (share link): #calc&share=...
    - FELÚJÍTÁSI TERV nézet (#plan) elemzés után
    - Export/Import JSON fájlba (letöltés/fájlválasztó)
-   - PRO gomb + PRO mód (localStorage) + 3D "Top nyereség" tartalom
+
+   + PRO (ingyen) – komolyabb inputok:
+     - Ablak U-érték
+     - HRV (hővisszanyerés) hatásfok: Hvent csökkentés
+     - n50 -> nAir becslés (opcionális) + gyors légzárási profil
+   + Admin (MVP PIN): PRO alapból ON, badge
 */
 
 (function () {
@@ -82,133 +87,75 @@
   }
 
   // ==============================
-  // PRO mód (localStorage) + modal
+  // PRO + ADMIN (MVP – ingyen)
   // ==============================
-  const PRO_KEY = "ea3d_pro_v1";
-  let EA_PRO = (localStorage.getItem(PRO_KEY) === "1");
+  const LS_PRO_KEY = "ea3d_pro_enabled_v1";
+  const LS_ADMIN_KEY = "ea3d_admin_v1";
 
-  const btnPro = $("btnPro");
+  // Állítsd be magadnak:
+  const ADMIN_PIN = "1976"; // <-- ezt írd át, ha akarod
+
+  let EA_IS_PRO = (localStorage.getItem(LS_PRO_KEY) === "1");
+  let EA_IS_ADMIN = (localStorage.getItem(LS_ADMIN_KEY) === "1");
+
+  // Adminnál alapból legyen PRO ON
+  if (EA_IS_ADMIN && !EA_IS_PRO) {
+    EA_IS_PRO = true;
+    localStorage.setItem(LS_PRO_KEY, "1");
+  }
 
   function setPro(on) {
-    EA_PRO = !!on;
-    try { localStorage.setItem(PRO_KEY, EA_PRO ? "1" : "0"); } catch (_) {}
-    document.body.classList.toggle("eaProOn", EA_PRO);
+    EA_IS_PRO = !!on;
+    localStorage.setItem(LS_PRO_KEY, EA_IS_PRO ? "1" : "0");
     updateProUi();
-    // 3D tartalom friss
-    if ((location.hash || "").includes("3d")) updateHeatmap();
+    toast(EA_IS_PRO ? "PRO bekapcsolva ✅" : "PRO kikapcsolva.");
+    // ha kalkulátorban vagyunk, frissítsünk
+    if ((location.hash || "").includes("calc")) {
+      // nem futtatjuk automatikusan az elemzést, csak frissítjük a pro panelt
+      ensureProPanel();
+    }
+  }
+
+  function setAdmin(on) {
+    EA_IS_ADMIN = !!on;
+    localStorage.setItem(LS_ADMIN_KEY, EA_IS_ADMIN ? "1" : "0");
+    if (EA_IS_ADMIN) {
+      // adminnál PRO ON
+      setPro(true);
+    }
+    updateProUi();
+  }
+
+  function adminLogin() {
+    const pin = prompt("Admin PIN:");
+    if (!pin) return;
+    if (pin === ADMIN_PIN) {
+      setAdmin(true);
+      toast("Admin mód: ON ✅");
+    } else {
+      toast("Hibás PIN.");
+    }
+  }
+
+  function adminLogout() {
+    setAdmin(false);
+    toast("Admin mód: OFF");
   }
 
   function updateProUi() {
-    if (!btnPro) return;
-    btnPro.textContent = EA_PRO ? "PRO ✓" : "PRO";
-    btnPro.title = EA_PRO ? "PRO aktív (katt = PRO menü)" : "PRO funkciók (katt)";
-  }
+    const proBtn = document.getElementById("btnPro");
+    if (proBtn) {
+      proBtn.textContent = EA_IS_PRO ? "PRO: ON" : "PRO";
+      proBtn.classList.toggle("active", !!EA_IS_PRO);
+    }
+    const adminBadge = document.getElementById("eaAdminBadge");
+    const proBadge = document.getElementById("eaProBadge");
 
-  function ensureProModal() {
-    if (document.getElementById("eaProModal")) return;
+    if (proBadge) proBadge.style.display = EA_IS_PRO ? "" : "none";
+    if (adminBadge) adminBadge.style.display = EA_IS_ADMIN ? "" : "none";
 
-    const wrap = document.createElement("div");
-    wrap.id = "eaProModal";
-    wrap.style.cssText = `
-      position: fixed; inset: 0;
-      display: none;
-      align-items: center; justify-content: center;
-      background: rgba(0,0,0,.55);
-      z-index: 9998;
-      padding: 16px;
-    `;
-
-    wrap.innerHTML = `
-      <div style="
-        width: min(560px, 100%);
-        background: rgba(12,18,34,.96);
-        border: 1px solid rgba(255,255,255,.14);
-        border-radius: 16px;
-        box-shadow: 0 18px 60px rgba(0,0,0,.55);
-        color: #eaf2ff;
-        overflow: hidden;
-      ">
-        <div style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.10); display:flex; align-items:center; gap:10px;">
-          <div style="font-weight:800; letter-spacing:.3px;">Energia Advisor – PRO</div>
-          <div style="margin-left:auto; opacity:.85; font-weight:700;">${EA_PRO ? "Aktív ✓" : "Inaktív"}</div>
-        </div>
-
-        <div style="padding: 16px;">
-          <div style="font-weight:700; margin-bottom:8px;">Mit ad a PRO ebben az MVP-ben?</div>
-          <ul style="margin: 0 0 12px 18px; line-height: 1.45;">
-            <li><b>3D nézet:</b> “Top nyereség” – megmutatja, mely elem hozza a legnagyobb veszteség-csökkenést.</li>
-            <li><b>Gyors döntéstámogatás:</b> a különbség nézetből rangsorolt bontás.</li>
-            <li><b>Megmarad a böngészőben:</b> aktiválás localStorage-be mentve.</li>
-          </ul>
-
-          <div style="display:flex; flex-wrap: wrap; gap:10px; margin-top: 12px;">
-            <button id="eaProToggle" class="btn primary" style="flex:1; min-width: 160px;">
-              ${EA_PRO ? "PRO kikapcsolása" : "PRO aktiválása (demo)"}
-            </button>
-            <button id="eaProBuy" class="btn ghost" style="flex:1; min-width: 160px;">
-              Vásárlás / infó (SzakiPiac)
-            </button>
-            <button id="eaProClose" class="btn ghost" style="flex:0; min-width: 120px;">
-              Bezár
-            </button>
-          </div>
-
-          <div class="muted" style="margin-top:10px; opacity:.85;">
-            Megjegyzés: ez egy “MVP PRO kapcsoló”. Ha később fizetés kell, ugyanide kötjük be.
-          </div>
-        </div>
-      </div>
-    `;
-
-    wrap.addEventListener("click", (e) => {
-      if (e.target === wrap) hideProModal();
-    });
-
-    document.body.appendChild(wrap);
-
-    const btnToggle = document.getElementById("eaProToggle");
-    const btnBuy = document.getElementById("eaProBuy");
-    const btnClose = document.getElementById("eaProClose");
-
-    btnToggle?.addEventListener("click", () => {
-      setPro(!EA_PRO);
-      toast(EA_PRO ? "PRO aktiválva ✅" : "PRO kikapcsolva.");
-      // frissítsük a modal header/state szövegét: egyszerűen zárjuk és újranyitáskor friss
-      hideProModal();
-    });
-
-    btnBuy?.addEventListener("click", () => {
-      flashBtn(btnBuy);
-      toast("Vissza a SzakiPiacra…");
-      goToSzakipiacHome();
-    });
-
-    btnClose?.addEventListener("click", () => hideProModal());
-  }
-
-  function showProModal() {
-    ensureProModal();
-    const el = document.getElementById("eaProModal");
-    if (!el) return;
-    // frissítsük a modal tartalmát egy gyors rebuilddel (state felirat miatt)
-    el.remove();
-    ensureProModal();
-    const el2 = document.getElementById("eaProModal");
-    if (!el2) return;
-    el2.style.display = "flex";
-  }
-
-  function hideProModal() {
-    const el = document.getElementById("eaProModal");
-    if (!el) return;
-    el.style.display = "none";
-  }
-
-  if (btnPro) {
-    btnPro.addEventListener("click", () => {
-      flashBtn(btnPro);
-      showProModal();
-    });
+    document.body.classList.toggle("isPro", !!EA_IS_PRO);
+    document.body.classList.toggle("isAdmin", !!EA_IS_ADMIN);
   }
 
   // ==============================
@@ -251,6 +198,8 @@
     if (which === "3d") updateHeatmap();
     if (which === "plan") renderPlan();
 
+    if (which === "calc") ensureProPanel();
+
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) {}
   }
 
@@ -271,7 +220,7 @@
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
   // ==============================
-  // NAV: „← SzakiPiac” gomb beszúrás
+  // NAV: „← SzakiPiac” + PRO + Badge-ek beszúrás
   // ==============================
   function addBackToSzakipiacButton() {
     if (document.getElementById("eaBackToSzakipiac")) return;
@@ -288,30 +237,130 @@
     const navGroup = refBtn.parentElement;
     if (!navGroup) return;
 
+    // ← SzakiPiac link
     const a = document.createElement("a");
     a.id = "eaBackToSzakipiac";
     a.href = SZAKIPIAC_HOME_URL;
     a.textContent = "← SzakiPiac";
-
     a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
-
-    if (!a.className) {
-      a.style.cssText = `
-        display:inline-flex;
-        align-items:center;
-        padding:10px 16px;
-        border-radius:999px;
-        background:rgba(255,255,255,.08);
-        border:1px solid rgba(255,255,255,.15);
-        color:#eaf2ff;
-        text-decoration:none;
-        font-weight:600;
-        backdrop-filter: blur(6px);
-      `;
-    }
     a.style.whiteSpace = "nowrap";
-
     navGroup.insertBefore(a, refBtn);
+
+    // PRO gomb
+    const proBtn = document.createElement("button");
+    proBtn.id = "btnPro";
+    proBtn.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim() || "navBtn";
+    proBtn.textContent = EA_IS_PRO ? "PRO: ON" : "PRO";
+    proBtn.title = "PRO mód: extra mezők + pontosabb számítás";
+    proBtn.addEventListener("click", () => {
+      flashBtn(proBtn);
+      // admin esetén simán toggle, nem adminnál is (ingyen)
+      setPro(!EA_IS_PRO);
+    });
+    navGroup.appendChild(proBtn);
+
+    // Badge-ek (PRO / ADMIN)
+    const proBadge = document.createElement("span");
+    proBadge.id = "eaProBadge";
+    proBadge.textContent = "PRO";
+    proBadge.style.cssText =
+      "margin-left:8px;padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px;background:rgba(0,200,120,.16);border:1px solid rgba(0,200,120,.35);color:#b9ffe0;display:none;white-space:nowrap;";
+    navGroup.appendChild(proBadge);
+
+    const adminBadge = document.createElement("span");
+    adminBadge.id = "eaAdminBadge";
+    adminBadge.textContent = "ADMIN";
+    adminBadge.style.cssText =
+      "margin-left:8px;padding:6px 10px;border-radius:999px;font-weight:800;font-size:12px;background:rgba(255,215,0,.14);border:1px solid rgba(255,215,0,.35);color:#fff1a6;display:none;white-space:nowrap;cursor:pointer;";
+    adminBadge.title = "Katt: admin ki";
+    adminBadge.addEventListener("click", () => adminLogout());
+    navGroup.appendChild(adminBadge);
+
+    // Admin login: dupla katt a logóra (MVP, nem zavar senkit)
+    const logo = document.querySelector(".logo");
+    if (logo) {
+      logo.style.cursor = "pointer";
+      logo.title = "Dupla katt: admin belépés";
+      logo.addEventListener("dblclick", () => adminLogin());
+    }
+
+    updateProUi();
+  }
+
+  // ==============================
+  // PRO PANEL (extra mezők a kalkulátorban)
+  // ==============================
+  const PRO_INPUT_IDS = [
+    "pro_winU",
+    "pro_hrvEff",
+    "pro_airProfile",
+    "pro_n50"
+  ];
+
+  const PRO_DEFAULTS = {
+    pro_winU: 1.4,      // korszerűbb ablak
+    pro_hrvEff: 0,      // % (0..85)
+    pro_airProfile: "avg", // drafty/avg/tight
+    pro_n50: ""         // ha megadja, felülírja a profilt
+  };
+
+  function ensureProPanel() {
+    if (!viewCalc) return;
+
+    // már megvan?
+    if ($("eaProPanel")) {
+      // csak láthatóság frissítés
+      $("eaProPanel").style.display = EA_IS_PRO ? "" : "none";
+      return;
+    }
+
+    // Megkeressük a "Cél állapot" panelt, és elé beszúrjuk
+    const panels = viewCalc.querySelectorAll(".panel");
+    if (!panels || panels.length < 2) return;
+
+    const targetPanel = panels[1];
+
+    const wrap = document.createElement("div");
+    wrap.id = "eaProPanel";
+    wrap.className = "panel";
+    wrap.style.marginBottom = "14px";
+    wrap.style.display = EA_IS_PRO ? "" : "none";
+    wrap.innerHTML = `
+      <div class="panelTitle">PRO – pontosítás (ingyen)</div>
+
+      <label class="field">Ablak U-érték (W/m²K)
+        <input id="pro_winU" type="number" min="0.6" max="3.5" step="0.1" />
+      </label>
+
+      <label class="field">Hővisszanyerés (HRV) hatásfok (%)
+        <input id="pro_hrvEff" type="number" min="0" max="85" step="1" />
+      </label>
+
+      <label class="field">Légzárási profil
+        <select id="pro_airProfile">
+          <option value="drafty">Huzatos (régi, sok rés)</option>
+          <option value="avg">Átlagos</option>
+          <option value="tight">Tömörebb (jobb légzárás)</option>
+        </select>
+      </label>
+
+      <label class="field">n50 (blower door) – ha van (1/h)
+        <input id="pro_n50" type="number" min="0" max="25" step="0.5" placeholder="pl. 6.0 (ha nincs, hagyd üresen)" />
+      </label>
+
+      <div class="muted tiny">
+        PRO magyarázat: az ablak U nem fix, a légcsere veszteséget HRV csökkenti, és n50-ből reálisabb nAir számolható.
+      </div>
+    `;
+
+    targetPanel.parentElement.insertBefore(wrap, targetPanel);
+
+    // defaultok betöltése
+    Object.keys(PRO_DEFAULTS).forEach((k) => {
+      const el = $(k);
+      if (!el) return;
+      el.value = PRO_DEFAULTS[k];
+    });
   }
 
   // ---------- Material lambdas (W/mK) ----------
@@ -360,13 +409,18 @@
     return { footprint, side, perim, wallGross, roofArea, floorArea, volume };
   }
 
-  function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct) {
+  function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct, hrvEffPct) {
     const H_wall = (Uwall * Awall);
     const H_win  = (Uwin * Awin);
     const H_roof = (Uroof * Aroof);
     const H_floor= (Ufloor * Afloor);
     const Htrans = H_wall + H_win + H_roof + H_floor;
-    const Hvent  = 0.33 * nAir * volume;
+
+    // Ventilációs veszteség: HRV hatásfokkal csökkenthető (PRO)
+    const baseHvent  = 0.33 * nAir * volume;
+    const hrvEff = clamp(num(hrvEffPct, 0), 0, 85) / 100;
+    const Hvent = baseHvent * (1 - hrvEff);
+
     const bridge = 1 + (bridgePct / 100);
 
     const parts = {
@@ -378,7 +432,7 @@
     };
     const H = (Htrans + Hvent) * bridge;
 
-    return { H, Htrans: Htrans * bridge, Hvent: Hvent * bridge, parts, bridge };
+    return { H, Htrans: Htrans * bridge, Hvent: Hvent * bridge, parts, bridge, hrvEff };
   }
 
   function annualHeatDemandKWh(H_WperK, HDD) {
@@ -410,13 +464,30 @@
     }
   }
 
+  // PRO: n50 -> nAir becslés (egyszerűsített)
+  // nAir ~ n50 / 20 … / 30 (épület + szél függő). Itt konzervatív 25.
+  function nAirFromN50(n50) {
+    const x = num(n50, 0);
+    if (!x || x <= 0) return null;
+    return clamp(x / 25, 0.2, 1.2);
+  }
+
+  function nAirFromProfile(profile) {
+    if (profile === "drafty") return 0.9;
+    if (profile === "tight") return 0.35;
+    return 0.6; // avg
+  }
+
   function computeScenario(params) {
     const {
       area, storeys, height,
       wallType, winRatio, nAir, bridgePct,
       wallInsCm, wallInsMat,
       roofInsCm, roofInsMat,
-      floorInsCm, floorInsMat
+      floorInsCm, floorInsMat,
+      // PRO
+      winUOverride,
+      hrvEffPct
     } = params;
 
     const g = geometry(area, storeys, height);
@@ -426,7 +497,9 @@
     const Uwall = uWithInsulation(U_BASE[wallType], wallInsCm, LAMBDA[wallInsMat]);
     const Uroof = uWithInsulation(U_BASE.roof, roofInsCm, LAMBDA[roofInsMat]);
     const Ufloor = uWithInsulation(U_BASE.floor, floorInsCm, LAMBDA[floorInsMat]);
-    const Uwin = U_BASE.window;
+
+    // Ablak U: alap = 2.6, PRO override = input
+    const Uwin = (winUOverride && winUOverride > 0) ? winUOverride : U_BASE.window;
 
     const loss = heatLossBreakdown(
       Uwall, AwallNet,
@@ -434,7 +507,8 @@
       Uroof, g.roofArea,
       Ufloor, g.floorArea,
       nAir, g.volume,
-      bridgePct
+      bridgePct,
+      hrvEffPct
     );
 
     return {
@@ -538,6 +612,13 @@
       if (!el) return;
       s[id] = el.value;
     });
+    // PRO mezők is
+    PRO_INPUT_IDS.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      s[id] = el.value;
+    });
+    s.__pro = EA_IS_PRO ? "1" : "0";
     return s;
   }
 
@@ -548,6 +629,19 @@
       if (!el) return;
       if (s[id] !== undefined) el.value = s[id];
     });
+
+    // PRO panelt előbb biztosítsuk
+    ensureProPanel();
+
+    PRO_INPUT_IDS.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      if (s[id] !== undefined) el.value = s[id];
+    });
+
+    if (s.__pro !== undefined) {
+      setPro(String(s.__pro) === "1");
+    }
   }
 
   // =========================
@@ -652,7 +746,7 @@
   }
 
   // =========================
-  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage) – gyors, böngészőben
+  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage)
   // =========================
   const STATE_KEY = "ea3d_state_v1";
 
@@ -721,7 +815,8 @@
       version: EXPORT_VERSION,
       createdAt: new Date().toISOString(),
       state: serializeState(),
-      lastAnalysis: EA_LAST || null
+      lastAnalysis: EA_LAST || null,
+      pro: EA_IS_PRO ? true : false
     };
   }
 
@@ -830,7 +925,25 @@
     const wallType = val("wallType", "brick");
 
     const winRatio = clamp(num(val("winRatio", 18), 18), 5, 35);
-    const nAir = clamp(num(val("nAir", 0.6), 0.6), 0.2, 1.2);
+
+    // Légcsere: PRO esetén profil/n50 felülírhatja az input mezőt
+    let nAir = clamp(num(val("nAir", 0.6), 0.6), 0.2, 1.2);
+
+    // PRO extra
+    const pro_winU = clamp(num(val("pro_winU", PRO_DEFAULTS.pro_winU), PRO_DEFAULTS.pro_winU), 0.6, 3.5);
+    const pro_hrvEff = clamp(num(val("pro_hrvEff", PRO_DEFAULTS.pro_hrvEff), PRO_DEFAULTS.pro_hrvEff), 0, 85);
+    const pro_airProfile = val("pro_airProfile", PRO_DEFAULTS.pro_airProfile);
+    const pro_n50_raw = val("pro_n50", PRO_DEFAULTS.pro_n50);
+
+    if (EA_IS_PRO) {
+      const n50 = num(pro_n50_raw, 0);
+      const nAirFrom = nAirFromN50(n50);
+      if (nAirFrom !== null) {
+        nAir = nAirFrom;
+      } else {
+        nAir = nAirFromProfile(pro_airProfile);
+      }
+    }
 
     const wallInsNow = clamp(num(val("wallInsNow", 0), 0), 0, 50);
     const wallInsMat = val("wallInsMat", "eps");
@@ -873,7 +986,13 @@
       heatingTarget, scopTarget,
       hdd, priceGas, priceEl,
       bridge,
-      costWallM2, costRoofM2, costFloorM2, costHeating
+      costWallM2, costRoofM2, costFloorM2, costHeating,
+
+      // PRO
+      pro_winU,
+      pro_hrvEff,
+      pro_airProfile,
+      pro_n50_raw
     };
   }
 
@@ -1010,7 +1129,9 @@
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
       wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
       roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
+      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
+      winUOverride: EA_IS_PRO ? x.pro_winU : null,
+      hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
     });
 
     const targetScenario = computeScenario({
@@ -1018,7 +1139,9 @@
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
       wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
       roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
+      winUOverride: EA_IS_PRO ? x.pro_winU : null,
+      hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
     });
 
     const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
@@ -1053,7 +1176,9 @@
         wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
         wallInsCm: wall, wallInsMat: x.wallInsMat,
         roofInsCm: roof, roofInsMat: x.roofInsMat,
-        floorInsCm: floor, floorInsMat: x.floorInsMat
+        floorInsCm: floor, floorInsMat: x.floorInsMat,
+        winUOverride: EA_IS_PRO ? x.pro_winU : null,
+        hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
       });
 
       const Q_model = annualHeatDemandKWh(sc.H.H, x.hdd);
@@ -1095,8 +1220,8 @@
     const heatingChanged = (x.heatingTarget !== x.heatingNow);
     const pbHeat = heatingChanged ? paybackYears(inv.heatCost, saveOnlyHeat) : Infinity;
 
-    const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
-    const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
+    const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U, Hvent: nowScenario.H.Hvent, hrv: nowScenario.H.hrvEff };
+    const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U, Hvent: targetScenario.H.Hvent, hrv: targetScenario.H.hrvEff };
 
     EA_LAST = {
       savingYear,
@@ -1112,6 +1237,10 @@
     };
     setPlanUnlocked(true);
 
+    const proLine = EA_IS_PRO ? `
+      <li><b>PRO:</b> Ablak U=${x.pro_winU} W/m²K • HRV=${x.pro_hrvEff}% • (nAir=${x.nAir.toFixed(2)} 1/h)</li>
+    ` : `<li class="muted"><b>PRO:</b> kikapcsolva (ablak U fix, HRV nincs)</li>`;
+
     const html = `
       <div class="sectionTitle">Eredmény</div>
 
@@ -1122,7 +1251,8 @@
           <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
           <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
           <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}</li>
-          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
+          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir.toFixed(2)} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
+          ${proLine}
         </ul>
       </div>
 
@@ -1167,7 +1297,9 @@
             H (MOST): ${(techNow.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techNow.Q_model)}<br/>
             H (CÉL): ${(techTarget.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techTarget.Q_model)}<br/>
             Kalibrációs szorzó: ${calib.toFixed(2)}<br/>
-            Q_real(MOST): ${fmtKwh(techNow.Q_real)} • Q_real(CÉL): ${fmtKwh(techTarget.Q_real)}
+            Q_real(MOST): ${fmtKwh(techNow.Q_real)} • Q_real(CÉL): ${fmtKwh(techTarget.Q_real)}<br/>
+            Vent (MOST): ${techNow.Hvent.toFixed(0)} W/K ${EA_IS_PRO ? `(HRV ${(techNow.hrv*100).toFixed(0)}%)` : ""}<br/>
+            Vent (CÉL): ${techTarget.Hvent.toFixed(0)} W/K ${EA_IS_PRO ? `(HRV ${(techTarget.hrv*100).toFixed(0)}%)` : ""}
           </div>
         </div>
       </details>
@@ -1368,7 +1500,9 @@
         wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
         wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
         roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
+        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
+        winUOverride: EA_IS_PRO ? x.pro_winU : null,
+        hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
       });
     }
     return computeScenario({
@@ -1376,7 +1510,9 @@
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
       wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
       roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
+      winUOverride: EA_IS_PRO ? x.pro_winU : null,
+      hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
     });
   }
 
@@ -1456,31 +1592,6 @@
 
     const ex = $("hmExplain");
     if (ex) ex.textContent = explain;
-
-    // ===== PRO: Top nyereség kitöltés (MOST->CÉL delta alapján) =====
-    const top = $("hmTopGain");
-    if (top) {
-      if (!EA_PRO) {
-        top.innerHTML = `PRO funkció: aktiváld a felső <b>PRO</b> gombbal, és megmutatom, mi hozza a legtöbbet.`;
-      } else {
-        const delta = keys.map(k => ({
-          k,
-          label: labelMap[k],
-          d: Math.max(0, (partsNow[k]||0) - (partsTar[k]||0))
-        })).sort((a,b)=> b.d - a.d);
-
-        const best = delta.slice(0, 3);
-        const sum = delta.reduce((s,x)=> s + x.d, 0) || 1;
-
-        top.innerHTML = `
-          <div style="margin-bottom:6px;"><b>Top 3 csökkenés (W/K)</b> – MOST → CÉL</div>
-          <ol style="margin:0 0 0 18px; line-height:1.45;">
-            ${best.map(x => `<li><b>${x.label}:</b> ${x.d.toFixed(0)} W/K <span class="muted">(${fmtPct((x.d/sum)*100)})</span></li>`).join("")}
-          </ol>
-          <div class="muted" style="margin-top:8px;">Tipp: nézd a <b>KÜLÖNBSÉG</b> módot a hőtérképnél – ugyanazt az “impact” logikát látod.</div>
-        `;
-      }
-    }
   }
 
   // ---------- initByHash (share betöltéssel) ----------
@@ -1517,10 +1628,6 @@
   setDefaults();
   setPlanUnlocked(false);
 
-  // PRO UI init
-  updateProUi();
-  document.body.classList.toggle("eaProOn", EA_PRO);
-
   bindShareButton();
   bindStateButtons();
   bindExportImportButtons();
@@ -1529,7 +1636,7 @@
   initByHash();
   window.addEventListener("hashchange", initByHash);
 
-  // „← SzakiPiac” gomb
+  // „← SzakiPiac” + PRO + badge
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
   } else {
