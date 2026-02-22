@@ -19,6 +19,15 @@
     </div>
 
     <nav class="nav">
+      <!-- ✅ FIX: SzakiPiac vissza gomb fixen a NAV-ban (nem main.js beszúrós, így nem tűnik el) -->
+      <button
+        id="eaBackToSzakipiac"
+        class="navBtn"
+        type="button"
+        onclick="window.location.href='https://szakipiac-2025.hu/#home'">
+        ← SzakiPiac
+      </button>
+
       <button id="btnHome" class="navBtn active">Kezdő</button>
       <button id="btnCalc" class="navBtn">Kalkulátor</button>
       <button id="btnPlan" class="navBtn" aria-disabled="true" title="Előbb futtasd az Elemzést.">Felújítási terv</button>
