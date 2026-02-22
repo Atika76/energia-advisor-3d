@@ -19,15 +19,6 @@
     </div>
 
     <nav class="nav">
-      <!-- ✅ FIX: SzakiPiac vissza gomb fixen a NAV-ban (nem main.js beszúrós, így nem tűnik el) -->
-      <button
-        id="eaBackToSzakipiac"
-        class="navBtn"
-        type="button"
-        onclick="window.location.href='https://szakipiac-2025.hu/#home'">
-        ← SzakiPiac
-      </button>
-
       <button id="btnHome" class="navBtn active">Kezdő</button>
       <button id="btnCalc" class="navBtn">Kalkulátor</button>
       <button id="btnPlan" class="navBtn" aria-disabled="true" title="Előbb futtasd az Elemzést.">Felújítási terv</button>
@@ -84,9 +75,15 @@
         </div>
 
         <div class="headBtns">
+          <!-- Böngészős mentés -->
           <button id="btnSaveState" class="btn ghost">💾 Mentés</button>
           <button id="btnLoadState" class="btn ghost">📥 Betöltés</button>
           <button id="btnClearState" class="btn ghost">🧹 Törlés</button>
+
+          <!-- FÁJLOS export/import -->
+          <button id="btnExportState" class="btn ghost">⬇️ Export</button>
+          <button id="btnImportState" class="btn ghost">⬆️ Import</button>
+
           <button id="btnExportPDF" class="btn primary">🖨️ PDF</button>
         </div>
       </div>
@@ -266,7 +263,7 @@
       </div>
     </section>
 
-    <!-- PLAN (ÚJ NÉZET) -->
+    <!-- PLAN -->
     <section id="viewPlan" class="card" style="display:none;">
       <div class="sectionHead">
         <div>
@@ -386,6 +383,9 @@
       Megjegyzés: döntéstámogatás. A számítások becslések, a valóságban a szerkezetek, légzárás, hőhidak, árak és szokások erősen befolyásolnak.
     </div>
   </main>
+
+  <!-- Import fájlválasztó (rejtett) -->
+  <input id="eaImportFile" type="file" accept="application/json" style="display:none" />
 
   <script src="main.js"></script>
 </body>
