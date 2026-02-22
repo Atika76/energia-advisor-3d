@@ -122,59 +122,8 @@
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
-  // ================================
-  // VISSZA A SZAKIPIA CRA GOMB – X HELYRE, NAV STÍLUSBAN
-  // ================================
-  function addBackToSzakipiacButton() {
-    if (document.getElementById("eaBackToSzakipiac")) return;
-
-    const refBtn =
-      document.getElementById("btnHome") ||
-      document.getElementById("btnCalc") ||
-      document.getElementById("btn3d") ||
-      document.getElementById("btnDocs");
-
-    if (!refBtn) return;
-
-    const navGroup = refBtn.parentElement;        // Kezdő / Kalkulátor / stb konténer
-    const topBar = navGroup && navGroup.parentElement; // teljes felső sáv (brand + nav)
-    if (!topBar || !navGroup) return;
-
-    // Gomb
-    const a = document.createElement("a");
-    a.id = "eaBackToSzakipiac";
-    a.href = SZAKIPIAC_HOME_URL;
-    a.textContent = "← Vissza a SzakiPiacra";
-
-    // Ugyanaz a stílus mint a többi felső gomb
-    a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
-
-    // Biztonsági alap stílus, ha a refBtn class üres
-    if (!a.className) {
-      a.style.cssText = `
-        display:inline-flex;
-        align-items:center;
-        padding:10px 16px;
-        border-radius:999px;
-        background:rgba(255,255,255,.08);
-        border:1px solid rgba(255,255,255,.15);
-        color:#eaf2ff;
-        text-decoration:none;
-        font-weight:600;
-        backdrop-filter: blur(6px);
-      `;
-    }
-
-    // X hely: a bal oldali cím/rész után, a jobb oldali nav gombok elé
-    // (topBar flex sorba beszúrjuk a navGroup elé)
-    topBar.insertBefore(a, navGroup);
-
-    // Ne nyomja rá a címre: rugalmasan középre tolja magát,
-    // de a nav marad jobbra.
-    a.style.marginLeft = "16px";
-    a.style.marginRight = "16px";
-    a.style.whiteSpace = "nowrap";
-  }
+  // ✅ FONTOS: innen kivettem a "Vissza a SzakiPiacra" gomb JS-beszúrását,
+  // mert az csinálta a bekarikázott felesleges gombot.
 
   // ---------- Material lambdas (W/mK) ----------
   const LAMBDA = {
@@ -1171,13 +1120,6 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
   bindShareButton();
   initByHash();
   window.addEventListener("hashchange", initByHash);
-
-  // ✅ felső „Vissza a SzakiPiacra” gomb berakása az X helyre
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
-  } else {
-    addBackToSzakipiacButton();
-  }
 
   // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) – MOST MINDIG VISSZA A FŐOLDALRA =====
   (function bindLeadButton(){
