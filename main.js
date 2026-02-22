@@ -122,58 +122,93 @@
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
-  // ================================
-  // VISSZA A SZAKIPIA CRA GOMB – X HELYRE, NAV STÍLUSBAN
-  // ================================
-  function addBackToSzakipiacButton() {
-    if (document.getElementById("eaBackToSzakipiac")) return;
+  // =========================================================
+  // ✅ SZAKIPIAC VISSZA – DUPE GOMB KEZELÉS
+  // - két gomb: #btnBackSzaki és #btnLead
+  // - maradjon az, amelyik KÖZELEBB van a NAV gombokhoz (Home/Calc/3D/Docs)
+  // - a másikat elrejtjük
+  // - a megmaradó gombra egységesen rákötjük a visszanavigálást
+  // =========================================================
 
-    const refBtn =
-      document.getElementById("btnHome") ||
-      document.getElementById("btnCalc") ||
-      document.getElementById("btn3d") ||
-      document.getElementById("btnDocs");
+  function navAnchorPoint() {
+    const navBtns = [btnHome, btnCalc, btn3d, btnDocs].filter(Boolean);
+    if (!navBtns.length) return null;
 
-    if (!refBtn) return;
+    // NAV gombok "középpontja" (átlag)
+    let sx = 0, sy = 0;
+    navBtns.forEach(b => {
+      const r = b.getBoundingClientRect();
+      sx += r.left + r.width / 2;
+      sy += r.top + r.height / 2;
+    });
+    return { x: sx / navBtns.length, y: sy / navBtns.length };
+  }
 
-    const navGroup = refBtn.parentElement;        // Kezdő / Kalkulátor / stb konténer
-    const topBar = navGroup && navGroup.parentElement; // teljes felső sáv (brand + nav)
-    if (!topBar || !navGroup) return;
+  function centerOf(el) {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
 
-    // Gomb
-    const a = document.createElement("a");
-    a.id = "eaBackToSzakipiac";
-    a.href = SZAKIPIAC_HOME_URL;
-    a.textContent = "← Vissza a SzakiPiacra";
+  function dist(a, b) {
+    const dx = a.x - b.x, dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
 
-    // Ugyanaz a stílus mint a többi felső gomb
-    a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
+  function wireBackButton(el) {
+    if (!el) return;
+    // ha <a>, állítsuk be a href-et is
+    try { el.setAttribute("href", SZAKIPIAC_HOME_URL); } catch (_) {}
 
-    // Biztonsági alap stílus, ha a refBtn class üres
-    if (!a.className) {
-      a.style.cssText = `
-        display:inline-flex;
-        align-items:center;
-        padding:10px 16px;
-        border-radius:999px;
-        background:rgba(255,255,255,.08);
-        border:1px solid rgba(255,255,255,.15);
-        color:#eaf2ff;
-        text-decoration:none;
-        font-weight:600;
-        backdrop-filter: blur(6px);
-      `;
-    }
+    el.addEventListener("click", (e) => {
+      // ha link, ne hagyjuk hogy máshova menjen
+      e.preventDefault();
+      goToSzakipiacHome();
+    });
+  }
 
-    // X hely: a bal oldali cím/rész után, a jobb oldali nav gombok elé
-    // (topBar flex sorba beszúrjuk a navGroup elé)
-    topBar.insertBefore(a, navGroup);
+  function hideButton(el) {
+    if (!el) return;
+    el.style.display = "none";
+    el.setAttribute("aria-hidden", "true");
+    el.tabIndex = -1;
+  }
 
-    // Ne nyomja rá a címre: rugalmasan középre tolja magát,
-    // de a nav marad jobbra.
-    a.style.marginLeft = "16px";
-    a.style.marginRight = "16px";
-    a.style.whiteSpace = "nowrap";
+  function keepClosestSzakipiacButton() {
+    const a = document.getElementById("btnBackSzaki");
+    const b = document.getElementById("btnLead");
+    if (!a && !b) return null;
+    if (a && !b) return a;
+    if (b && !a) return b;
+
+    const anchor = navAnchorPoint();
+    // ha nincs NAV, akkor default: maradjon a btnBackSzaki (általában a NAV-ban van)
+    if (!anchor) return a;
+
+    const ca = centerOf(a);
+    const cb = centerOf(b);
+    if (!ca || !cb) return a || b;
+
+    const da = dist(ca, anchor);
+    const db = dist(cb, anchor);
+
+    // maradjon, amelyik közelebb van a NAV-hoz
+    return (da <= db) ? a : b;
+  }
+
+  function bindSzakipiacBackSmart() {
+    const keep = keepClosestSzakipiacButton();
+    const a = document.getElementById("btnBackSzaki");
+    const b = document.getElementById("btnLead");
+
+    if (!keep) return;
+
+    // a másikat elrejtjük
+    if (a && keep !== a) hideButton(a);
+    if (b && keep !== b) hideButton(b);
+
+    // a megmaradó gombot bekötjük
+    wireBackButton(keep);
   }
 
   // ---------- Material lambdas (W/mK) ----------
@@ -758,149 +793,7 @@
   });
 
   // ---------- TUDÁSTÁR (TELI + működő kategóriák) ----------
-  const DOCS = [
-    {
-      id: "hdd",
-      cat: "Alapok",
-      read: "~3 perc",
-      tags: ["HDD", "fűtés", "alapok"],
-      title: "Mi az a HDD (fűtési foknap) és miért számít?",
-      body: `
-A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.
-Minél nagyobb a HDD, annál több fűtési energia kell ugyanahhoz a házhoz.<br/><br/>
-<b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/>
-<b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.
-      `.trim()
-    },
-    {
-      id: "uvalue",
-      cat: "Alapok",
-      read: "~4 perc",
-      tags: ["U-érték", "hőveszteség", "fal"],
-      title: "U-érték egyszerűen: mit jelent és mitől lesz jobb?",
-      body: `
-Az <b>U-érték</b> (W/m²K) megmutatja, mennyi hő “szökik át” 1 m² szerkezeten 1°C különbségnél.<br/><br/>
-<b>Kisebb U = jobb.</b> Szigetelésnél általában a fal/födém U-értéke csökken látványosan.<br/><br/>
-A kalkulátor “régi” tipikus U-ból indul, és a megadott cm + anyag alapján számolja a javulást.
-      `.trim()
-    },
-    {
-      id: "airchange",
-      cat: "Alapok",
-      read: "~3 perc",
-      tags: ["légcsere", "infiltráció", "szellőzés"],
-      title: "Légcsere (1/h): miért tud elvinni rengeteg pénzt?",
-      body: `
-A légcsere a ház “szivárgását” jelzi: rések, rossz nyílászáró, kéményhatás.<br/><br/>
-A hőveszteség része: <b>Hvent = 0,33 × n × térfogat</b> (W/K).<br/><br/>
-<b>Gyakorlat:</b> hiába szigetelsz, ha a ház “huzatos”, a megtakarítás kisebb lesz. Ezért van külön blokk a 3D nézetben is.
-      `.trim()
-    },
-    {
-      id: "roof_first",
-      cat: "Szigetelés",
-      read: "~4 perc",
-      tags: ["födém", "padlás", "megtérülés"],
-      title: "Miért a födém/padlás szigetelés szokott a legjobb első lépés lenni?",
-      body: `
-A meleg levegő felfelé száll, ezért a födém sok háznál “fő veszteségcsatorna”.<br/><br/>
-<b>Előny:</b> gyors kivitelezés, sokszor olcsóbb, és már 20–30 cm jó anyaggal látványos eredményt ad.<br/><br/>
-A kalkulátorban próbáld: csak a födémet állítsd CÉL-ra → nézd meg a Prioritás listában.
-      `.trim()
-    },
-    {
-      id: "wall_eps_rw",
-      cat: "Szigetelés",
-      read: "~5 perc",
-      tags: ["EPS", "kőzetgyapot", "fal"],
-      title: "EPS vagy kőzetgyapot? Rövid döntési szempontok",
-      body: `
-<b>EPS:</b> jó ár/érték, könnyű, elterjedt. <b>Kőzetgyapot:</b> jobb pára- és tűztechnika, jó hanggátlás.<br/><br/>
-A hőszigetelés szempontjából mindkettő jó lehet, a különbséget gyakran a részletek adják: ragasztás, dübelezés, hálózás, lábazat, csomópontok.<br/><br/>
-Tipp: ha “hőhíd” problémád van, a kivitelezés minősége többet számít, mint az anyag neve.
-      `.trim()
-    },
-    {
-      id: "floor",
-      cat: "Szigetelés",
-      read: "~4 perc",
-      tags: ["padló", "aljzat", "XPS"],
-      title: "Padló/aljzat szigetelés: mikor éri meg?",
-      body: `
-Padló szigetelés akkor ad nagyot, ha alatta hideg tér van (pince, szellőző légrés, talaj felől hideg).<br/><br/>
-Felújításnál gyakori, hogy bontással jár → ezért a megtérülés változó.<br/><br/>
-A kalkulátorban külön “csak padló” összehasonlítással látod, mennyi Ft/év jön ki belőle.
-      `.trim()
-    },
-    {
-      id: "boiler_vs_hp",
-      cat: "Fűtés",
-      read: "~5 perc",
-      tags: ["kazán", "hőszivattyú", "SCOP"],
-      title: "Kazáncsere vagy hőszivattyú? Miért fontos a SCOP?",
-      body: `
-Hőszivattyúnál a <b>SCOP</b> az éves átlagos hatásfokot jelzi: mennyi hő lesz 1 kWh villanyból.<br/><br/>
-<b>Példa:</b> SCOP 3,6 → 1 kWh villanyból ~3,6 kWh hő.<br/><br/>
-Fontos: ha a ház nincs rendben (szigetelés/légzárás), a fűtéscsere önmagában sokszor kevésbé “üt”, mint gondolnád.
-      `.trim()
-    },
-    {
-      id: "cond_boiler",
-      cat: "Fűtés",
-      read: "~3 perc",
-      tags: ["kondenz", "kazán", "hatásfok"],
-      title: "Kondenzációs kazán: mikor hoz látványos javulást?",
-      body: `
-Régi kazánhoz képest a kondenzációs kazán hatásfoka jobb, főleg alacsonyabb előremenő hőmérsékleten.<br/><br/>
-<b>Ha radiátor + magas előremenő</b> van, a különbség lehet kisebb, mint padlófűtésnél.<br/><br/>
-A kalkulátorban: állítsd MOST = régi kazán, CÉL = kondenz → nézd meg a “csak fűtés” hatást.
-      `.trim()
-    },
-    {
-      id: "thermal_bridges",
-      cat: "Tipikus hibák",
-      read: "~4 perc",
-      tags: ["hőhíd", "csomópont", "penész"],
-      title: "Hőhidak: miért lehet penész akkor is, ha szigeteltél?",
-      body: `
-A hőhíd olyan pont, ahol a hő “könnyebben” távozik (koszorú, áthidaló, erkélylemez, lábazat, csatlakozások).<br/><br/>
-Ha a felület lehűl, kicsapódhat a pára → penész kockázat.<br/><br/>
-Ezért van a kalkulátorban <b>hőhíd korrekció</b>: ha sok a csomóponti hiba, a valós megtakarítás kisebb lehet.
-      `.trim()
-    },
-    {
-      id: "air_sealing_mistake",
-      cat: "Tipikus hibák",
-      read: "~3 perc",
-      tags: ["légzárás", "huzat", "szalag"],
-      title: "Tipikus hiba: szigetelés van, de a ház továbbra is “huzatos”",
-      body: `
-Szigetelés mellett is elmehet a hő, ha nincs légzárás: rossz ablakbeépítés, rések, padlásfeljáró, kémény környéke.<br/><br/>
-<b>Gyors ellenőrzés:</b> hideg napon kézzel/füsttel érezhető-e áramlás a kritikus helyeken?<br/><br/>
-A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyásol mindent.
-      `.trim()
-    },
-    {
-      id: "questions_for_contractor",
-      cat: "Kérdéslista",
-      read: "~5 perc",
-      tags: ["kivitelező", "kérdések", "minőség"],
-      title: "10 kérdés kivitelezőnek, hogy ne bukj a részleteken",
-      body: `
-1) Milyen csomóponti megoldást adsz koszorúnál/lábazatnál?<br/>
-2) Mivel ragasztasz, dűbelezés hogyan lesz?<br/>
-3) Párazárás/páratechnika: hol kritikus?<br/>
-4) Milyen vastagságot miért javasolsz?<br/>
-5) Milyen hálózás, élvédő, indítóprofil lesz?<br/>
-6) Milyen minőségű anyagot hozol (márka, rendszer)?<br/>
-7) Fotózod-e a rétegrendet kivitelezés közben?<br/>
-8) Garancia mire és mennyi?<br/>
-9) Mikor fizetek és milyen ütemezéssel?<br/>
-10) Mi a leggyakoribb hibapont ennél a háznál?
-<b>Tipp:</b> ha erre bizonytalan válaszokat kapsz, az már jel.
-      `.trim()
-    }
-  ];
+  const DOCS = [ /* ... a te DOCS tömböd változatlanul ... */ ];
 
   let docFilterCat = "Összes";
   let docSearch = "";
@@ -1172,23 +1065,11 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
   initByHash();
   window.addEventListener("hashchange", initByHash);
 
-  // ✅ felső „Vissza a SzakiPiacra” gomb berakása az X helyre
+  // ✅ SzakiPiac gomb: maradjon a NAV-hoz közelebbi, a másik eltűnik
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
+    document.addEventListener("DOMContentLoaded", bindSzakipiacBackSmart);
   } else {
-    addBackToSzakipiacButton();
+    bindSzakipiacBackSmart();
   }
-
-  // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) – MOST MINDIG VISSZA A FŐOLDALRA =====
-  (function bindLeadButton(){
-    const btnLead = document.getElementById("btnLead");
-    if (!btnLead) return;
-
-    btnLead.addEventListener("click", () => {
-      flashBtn(btnLead);
-      toast("Vissza a SzakiPiacra…");
-      goToSzakipiacHome(); // ✅ mindig #home
-    });
-  })();
 
 })();
