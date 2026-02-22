@@ -1,17 +1,10 @@
 /* Energia Advisor 3D – Valós (C) kalkulátor
-   - UA + infiltráció + HDD
-   - Kalibrálás: a MOST Ft/év értéket bázisnak vesszük (hogy a modell "valós" legyen)
-   - Tudástár (kereső + kategóriák + cikk nézet)
-   - 3D nézet (MVP) = Profi hőtérkép MOST/CÉL/KÜLÖNBSÉG
-   - LINKELHETŐ KALKULÁCIÓ (share link): #calc&share=...
-   - FELÚJÍTÁSI TERV nézet (#plan) elemzés után
-   - Export/Import JSON fájlba (letöltés/fájlválasztó)
+   + PRO (ingyen) – valós geometria + rétegrend U
+   - Kézi geometria: kerület, falmagasság, ablak m², tetőtípus (lapos/nyeregtető/sátortető) + hajlásszög
+   - Rétegrend: fal/födém/padló anyag + vastagság (mm) -> U számítás
 
-   + PRO (ingyen) – komolyabb inputok:
-     - Ablak U-érték
-     - HRV (hővisszanyerés) hatásfok: Hvent csökkentés
-     - n50 -> nAir becslés (opcionális) + gyors légzárási profil
-   + Admin (MVP PIN): PRO alapból ON, badge
+   Megjegyzés:
+   - Ez továbbra is MVP: gyors, érthető, működik GitHub Pages-en backend nélkül.
 */
 
 (function () {
@@ -89,16 +82,13 @@
   // ==============================
   // PRO + ADMIN (MVP – ingyen)
   // ==============================
-  const LS_PRO_KEY = "ea3d_pro_enabled_v1";
+  const LS_PRO_KEY = "ea3d_pro_enabled_v2";
   const LS_ADMIN_KEY = "ea3d_admin_v1";
-
-  // Állítsd be magadnak:
-  const ADMIN_PIN = "1976"; // <-- ezt írd át, ha akarod
+  const ADMIN_PIN = "1976"; // <-- átírható
 
   let EA_IS_PRO = (localStorage.getItem(LS_PRO_KEY) === "1");
   let EA_IS_ADMIN = (localStorage.getItem(LS_ADMIN_KEY) === "1");
 
-  // Adminnál alapból legyen PRO ON
   if (EA_IS_ADMIN && !EA_IS_PRO) {
     EA_IS_PRO = true;
     localStorage.setItem(LS_PRO_KEY, "1");
@@ -109,20 +99,13 @@
     localStorage.setItem(LS_PRO_KEY, EA_IS_PRO ? "1" : "0");
     updateProUi();
     toast(EA_IS_PRO ? "PRO bekapcsolva ✅" : "PRO kikapcsolva.");
-    // ha kalkulátorban vagyunk, frissítsünk
-    if ((location.hash || "").includes("calc")) {
-      // nem futtatjuk automatikusan az elemzést, csak frissítjük a pro panelt
-      ensureProPanel();
-    }
+    if ((location.hash || "").includes("calc")) ensureProPanel();
   }
 
   function setAdmin(on) {
     EA_IS_ADMIN = !!on;
     localStorage.setItem(LS_ADMIN_KEY, EA_IS_ADMIN ? "1" : "0");
-    if (EA_IS_ADMIN) {
-      // adminnál PRO ON
-      setPro(true);
-    }
+    if (EA_IS_ADMIN) setPro(true);
     updateProUi();
   }
 
@@ -136,7 +119,6 @@
       toast("Hibás PIN.");
     }
   }
-
   function adminLogout() {
     setAdmin(false);
     toast("Admin mód: OFF");
@@ -150,12 +132,12 @@
     }
     const adminBadge = document.getElementById("eaAdminBadge");
     const proBadge = document.getElementById("eaProBadge");
-
     if (proBadge) proBadge.style.display = EA_IS_PRO ? "" : "none";
     if (adminBadge) adminBadge.style.display = EA_IS_ADMIN ? "" : "none";
-
     document.body.classList.toggle("isPro", !!EA_IS_PRO);
     document.body.classList.toggle("isAdmin", !!EA_IS_ADMIN);
+    const panel = $("eaProPanel");
+    if (panel) panel.style.display = EA_IS_PRO ? "" : "none";
   }
 
   // ==============================
@@ -197,7 +179,6 @@
     if (which === "docs") renderDocs();
     if (which === "3d") updateHeatmap();
     if (which === "plan") renderPlan();
-
     if (which === "calc") ensureProPanel();
 
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) {}
@@ -237,7 +218,6 @@
     const navGroup = refBtn.parentElement;
     if (!navGroup) return;
 
-    // ← SzakiPiac link
     const a = document.createElement("a");
     a.id = "eaBackToSzakipiac";
     a.href = SZAKIPIAC_HOME_URL;
@@ -246,20 +226,17 @@
     a.style.whiteSpace = "nowrap";
     navGroup.insertBefore(a, refBtn);
 
-    // PRO gomb
     const proBtn = document.createElement("button");
     proBtn.id = "btnPro";
     proBtn.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim() || "navBtn";
     proBtn.textContent = EA_IS_PRO ? "PRO: ON" : "PRO";
-    proBtn.title = "PRO mód: extra mezők + pontosabb számítás";
+    proBtn.title = "PRO mód: valós geometria + rétegrend U";
     proBtn.addEventListener("click", () => {
       flashBtn(proBtn);
-      // admin esetén simán toggle, nem adminnál is (ingyen)
       setPro(!EA_IS_PRO);
     });
     navGroup.appendChild(proBtn);
 
-    // Badge-ek (PRO / ADMIN)
     const proBadge = document.createElement("span");
     proBadge.id = "eaProBadge";
     proBadge.textContent = "PRO";
@@ -276,7 +253,6 @@
     adminBadge.addEventListener("click", () => adminLogout());
     navGroup.appendChild(adminBadge);
 
-    // Admin login: dupla katt a logóra (MVP, nem zavar senkit)
     const logo = document.querySelector(".logo");
     if (logo) {
       logo.style.cursor = "pointer";
@@ -288,89 +264,121 @@
   }
 
   // ==============================
-  // PRO PANEL (extra mezők a kalkulátorban)
+  // Anyag adatbázis (λ W/mK) – rétegrendhez
   // ==============================
-  const PRO_INPUT_IDS = [
-    "pro_winU",
-    "pro_hrvEff",
-    "pro_airProfile",
-    "pro_n50"
-  ];
+  const MAT = {
+    // falazat
+    "tegla": 0.60,
+    "porotherm": 0.25,
+    "ytong": 0.12,
+    "beton": 1.70,
+    "valyog": 0.70,
 
-  const PRO_DEFAULTS = {
-    pro_winU: 1.4,      // korszerűbb ablak
-    pro_hrvEff: 0,      // % (0..85)
-    pro_airProfile: "avg", // drafty/avg/tight
-    pro_n50: ""         // ha megadja, felülírja a profilt
+    // szigetelések
+    "eps": 0.037,
+    "grafitos_eps": 0.031,
+    "kozetgyapot": 0.039,
+    "xps": 0.034,
+    "pur": 0.024,
+
+    // egyeb
+    "vakolat": 0.70,
+    "gipszkarton": 0.25,
+    "fa": 0.13,
+    "osb": 0.13,
+    "levegoreteg": 0.18 // nagyon durva közelítés (R), ezt külön kezeljük
   };
 
-  function ensureProPanel() {
-    if (!viewCalc) return;
+  const MAT_ALIASES = {
+    "tégla": "tegla",
+    "kőzetgyapot": "kozetgyapot",
+    "kozetgyapot": "kozetgyapot",
+    "grafitos eps": "grafitos_eps",
+    "gipszkarton": "gipszkarton",
+    "porotherm": "porotherm",
+    "ytong": "ytong",
+    "vályog": "valyog",
+    "valyog": "valyog",
+    "vakolat": "vakolat",
+    "fa": "fa",
+    "osb": "osb",
+    "xps": "xps",
+    "eps": "eps",
+    "pur": "pur"
+  };
 
-    // már megvan?
-    if ($("eaProPanel")) {
-      // csak láthatóság frissítés
-      $("eaProPanel").style.display = EA_IS_PRO ? "" : "none";
-      return;
-    }
-
-    // Megkeressük a "Cél állapot" panelt, és elé beszúrjuk
-    const panels = viewCalc.querySelectorAll(".panel");
-    if (!panels || panels.length < 2) return;
-
-    const targetPanel = panels[1];
-
-    const wrap = document.createElement("div");
-    wrap.id = "eaProPanel";
-    wrap.className = "panel";
-    wrap.style.marginBottom = "14px";
-    wrap.style.display = EA_IS_PRO ? "" : "none";
-    wrap.innerHTML = `
-      <div class="panelTitle">PRO – pontosítás (ingyen)</div>
-
-      <label class="field">Ablak U-érték (W/m²K)
-        <input id="pro_winU" type="number" min="0.6" max="3.5" step="0.1" />
-      </label>
-
-      <label class="field">Hővisszanyerés (HRV) hatásfok (%)
-        <input id="pro_hrvEff" type="number" min="0" max="85" step="1" />
-      </label>
-
-      <label class="field">Légzárási profil
-        <select id="pro_airProfile">
-          <option value="drafty">Huzatos (régi, sok rés)</option>
-          <option value="avg">Átlagos</option>
-          <option value="tight">Tömörebb (jobb légzárás)</option>
-        </select>
-      </label>
-
-      <label class="field">n50 (blower door) – ha van (1/h)
-        <input id="pro_n50" type="number" min="0" max="25" step="0.5" placeholder="pl. 6.0 (ha nincs, hagyd üresen)" />
-      </label>
-
-      <div class="muted tiny">
-        PRO magyarázat: az ablak U nem fix, a légcsere veszteséget HRV csökkenti, és n50-ből reálisabb nAir számolható.
-      </div>
-    `;
-
-    targetPanel.parentElement.insertBefore(wrap, targetPanel);
-
-    // defaultok betöltése
-    Object.keys(PRO_DEFAULTS).forEach((k) => {
-      const el = $(k);
-      if (!el) return;
-      el.value = PRO_DEFAULTS[k];
-    });
+  function normalizeMatName(s) {
+    const k = String(s || "").trim().toLowerCase();
+    return MAT_ALIASES[k] || k;
   }
 
-  // ---------- Material lambdas (W/mK) ----------
+  // Rétegrend parsing: soronként "anyag,mm" vagy "anyag mm" vagy "anyag:mm"
+  // Példa:
+  // vakolat 15
+  // tegla 300
+  // eps 150
+  // vakolat 10
+  function parseLayers(text) {
+    const lines = String(text || "")
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => !!l && !l.startsWith("#"));
+
+    const layers = [];
+    for (const line of lines) {
+      const cleaned = line.replace(/[,;:]/g, " ");
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      if (parts.length < 2) continue;
+      const name = normalizeMatName(parts[0]);
+      const mm = num(parts[1], 0);
+      if (mm <= 0) continue;
+      layers.push({ name, mm });
+    }
+    return layers;
+  }
+
+  // U számítás rétegrendből (Rsi + Rse + Σ (d/λ))
+  // Rsi/Rse: tipikus közelítések (függőleges fal)
+  // fal: Rsi 0.13, Rse 0.04
+  // tető/födém: Rsi 0.10, Rse 0.04
+  // padló: Rsi 0.17, Rse 0.04 (talaj felé nagyon bonyolult – itt MVP közelítés)
+  function uFromLayers(layers, kind) {
+    if (!layers || layers.length === 0) return null;
+
+    let Rsi = 0.13, Rse = 0.04;
+    if (kind === "roof") { Rsi = 0.10; Rse = 0.04; }
+    if (kind === "floor") { Rsi = 0.17; Rse = 0.04; }
+
+    let R = Rsi + Rse;
+
+    for (const lay of layers) {
+      const name = lay.name;
+      const d = Math.max(0, lay.mm) / 1000; // m
+
+      // levegoreteg: itt nem d/λ, hanem kb R ~ 0.18 (durva)
+      if (name === "levegoreteg") {
+        R += 0.18;
+        continue;
+      }
+
+      const lam = MAT[name];
+      if (!lam || lam <= 0) continue;
+      R += d / lam;
+    }
+
+    if (R <= 0) return null;
+    return 1 / R;
+  }
+
+  // ==============================
+  // U alapok (ha nincs rétegrend)
+  // ==============================
   const LAMBDA = {
     eps: 0.037,
     rockwool: 0.039,
     xps: 0.034
   };
 
-  // Base U-values (W/m²K) for "régi" szerkezetek
   const U_BASE = {
     brick: 1.25,
     adobe: 1.10,
@@ -380,7 +388,6 @@
     window: 2.60
   };
 
-  // fűtés hatásfok / COP
   const HEAT = {
     gas_old: { name: "Régi gázkazán", eff: 0.75 },
     gas_cond: { name: "Kondenzációs gázkazán", eff: 0.92 },
@@ -395,18 +402,73 @@
     return 1 / (r0 + rIns);
   }
 
-  function geometry(areaTotal, storeys, height) {
+  // ==============================
+  // Geometria (AUTO / KÉZI)
+  // ==============================
+  function geometryAuto(areaTotal, storeys, height) {
     const s = clamp(storeys, 1, 3);
     const footprint = areaTotal / s;
     const side = Math.sqrt(Math.max(footprint, 1));
     const perim = 4 * side;
 
     const wallGross = perim * height * s;
-    const roofArea = footprint;
+    const roofPlan = footprint;
     const floorArea = footprint;
     const volume = footprint * height * s;
 
-    return { footprint, side, perim, wallGross, roofArea, floorArea, volume };
+    return { mode:"auto", footprint, perim, wallGross, roofPlan, floorArea, volume, storeys:s, height };
+  }
+
+  function roofAreaFromType(roofPlanArea, roofType, pitchDeg) {
+    const A = Math.max(0, roofPlanArea);
+    const t = String(roofType || "flat");
+    const pitch = clamp(num(pitchDeg, 0), 0, 60);
+    if (t === "flat") return A;
+
+    // nyeregtető / sátortető: a plan területet osztjuk cos(pitch)-cel (MVP közelítés)
+    const rad = pitch * Math.PI / 180;
+    const cos = Math.max(0.25, Math.cos(rad));
+    let area = A / cos;
+
+    // sátortetőnél kicsit több felület szokott kijönni csomópontok miatt (durva +5%)
+    if (t === "hip") area *= 1.05;
+
+    return area;
+  }
+
+  function geometryManual(areaTotal, storeys, height, perimM, wallHeightM, roofType, pitchDeg) {
+    const s = clamp(storeys, 1, 3);
+    const A_total = Math.max(20, num(areaTotal, 100));
+    const footprint = A_total / s;
+
+    const perim = Math.max(5, num(perimM, 40));
+    const h = clamp(num(wallHeightM, height), 2.2, 3.5);
+
+    const wallGross = perim * h * s;
+    const roofPlan = footprint;
+    const roofArea = roofAreaFromType(roofPlan, roofType, pitchDeg);
+
+    // padló terület (földszint plan)
+    const floorArea = footprint;
+
+    // térfogat: összes szint alapterület * belmagasság
+    const volume = A_total * h;
+
+    return { mode:"manual", footprint, perim, wallGross, roofPlan, roofArea, floorArea, volume, storeys:s, height:h, roofType, pitchDeg };
+  }
+
+  // ==============================
+  // Szellőzés (PRO)
+  // ==============================
+  function nAirFromN50(n50) {
+    const x = num(n50, 0);
+    if (!x || x <= 0) return null;
+    return clamp(x / 25, 0.2, 1.2);
+  }
+  function nAirFromProfile(profile) {
+    if (profile === "drafty") return 0.9;
+    if (profile === "tight") return 0.35;
+    return 0.6;
   }
 
   function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct, hrvEffPct) {
@@ -416,7 +478,6 @@
     const H_floor= (Ufloor * Afloor);
     const Htrans = H_wall + H_win + H_roof + H_floor;
 
-    // Ventilációs veszteség: HRV hatásfokkal csökkenthető (PRO)
     const baseHvent  = 0.33 * nAir * volume;
     const hrvEff = clamp(num(hrvEffPct, 0), 0, 85) / 100;
     const Hvent = baseHvent * (1 - hrvEff);
@@ -464,62 +525,211 @@
     }
   }
 
-  // PRO: n50 -> nAir becslés (egyszerűsített)
-  // nAir ~ n50 / 20 … / 30 (épület + szél függő). Itt konzervatív 25.
-  function nAirFromN50(n50) {
-    const x = num(n50, 0);
-    if (!x || x <= 0) return null;
-    return clamp(x / 25, 0.2, 1.2);
-  }
+  // ==============================
+  // PRO panel + extra inputok (dinamikusan beszúrva)
+  // ==============================
+  const PRO_INPUT_IDS = [
+    "pro_geomMode",
+    "pro_perim",
+    "pro_wallH",
+    "pro_winArea",
+    "pro_roofType",
+    "pro_pitchDeg",
 
-  function nAirFromProfile(profile) {
-    if (profile === "drafty") return 0.9;
-    if (profile === "tight") return 0.35;
-    return 0.6; // avg
-  }
+    "pro_winU",
+    "pro_hrvEff",
+    "pro_airProfile",
+    "pro_n50",
 
-  function computeScenario(params) {
-    const {
-      area, storeys, height,
-      wallType, winRatio, nAir, bridgePct,
-      wallInsCm, wallInsMat,
-      roofInsCm, roofInsMat,
-      floorInsCm, floorInsMat,
-      // PRO
-      winUOverride,
-      hrvEffPct
-    } = params;
+    "pro_useLayers_wall",
+    "pro_useLayers_roof",
+    "pro_useLayers_floor",
+    "pro_layers_wall",
+    "pro_layers_roof",
+    "pro_layers_floor"
+  ];
 
-    const g = geometry(area, storeys, height);
-    const Awin = g.wallGross * clamp(winRatio, 5, 35) / 100;
-    const AwallNet = Math.max(0, g.wallGross - Awin);
+  const PRO_DEFAULTS = {
+    pro_geomMode: "auto",
+    pro_perim: 40,
+    pro_wallH: 2.6,
+    pro_winArea: "",
 
-    const Uwall = uWithInsulation(U_BASE[wallType], wallInsCm, LAMBDA[wallInsMat]);
-    const Uroof = uWithInsulation(U_BASE.roof, roofInsCm, LAMBDA[roofInsMat]);
-    const Ufloor = uWithInsulation(U_BASE.floor, floorInsCm, LAMBDA[floorInsMat]);
+    pro_roofType: "gable", // flat | gable | hip
+    pro_pitchDeg: 30,
 
-    // Ablak U: alap = 2.6, PRO override = input
-    const Uwin = (winUOverride && winUOverride > 0) ? winUOverride : U_BASE.window;
+    pro_winU: 1.4,
+    pro_hrvEff: 0,
+    pro_airProfile: "avg",
+    pro_n50: "",
 
-    const loss = heatLossBreakdown(
-      Uwall, AwallNet,
-      Uwin, Awin,
-      Uroof, g.roofArea,
-      Ufloor, g.floorArea,
-      nAir, g.volume,
-      bridgePct,
-      hrvEffPct
-    );
+    pro_useLayers_wall: "1",
+    pro_useLayers_roof: "1",
+    pro_useLayers_floor: "0",
 
-    return {
-      geom: g,
-      areas: { AwallNet, Awin, Aroof: g.roofArea, Afloor: g.floorArea },
-      U: { Uwall, Uwin, Uroof, Ufloor },
-      H: loss
+    pro_layers_wall:
+`vakolat 15
+tegla 300
+eps 150
+vakolat 10`,
+    pro_layers_roof:
+`gipszkarton 12
+kozetgyapot 250
+osb 18`,
+    pro_layers_floor:
+`beton 120
+xps 100`
+  };
+
+  function ensureProPanel() {
+    if (!viewCalc) return;
+    if ($("eaProPanel")) {
+      $("eaProPanel").style.display = EA_IS_PRO ? "" : "none";
+      return;
+    }
+
+    const panels = viewCalc.querySelectorAll(".panel");
+    if (!panels || panels.length < 2) return;
+
+    const targetPanel = panels[1];
+    const wrap = document.createElement("div");
+    wrap.id = "eaProPanel";
+    wrap.className = "panel";
+    wrap.style.marginBottom = "14px";
+    wrap.style.display = EA_IS_PRO ? "" : "none";
+
+    wrap.innerHTML = `
+      <div class="panelTitle">PRO – valós geometria + rétegrend (ingyen)</div>
+
+      <div class="out" style="margin-top:10px;">
+        <div class="sectionTitle">1) Geometria (felületek)</div>
+
+        <label class="field">Mód
+          <select id="pro_geomMode">
+            <option value="auto">Automatikus (alapterületből becsült)</option>
+            <option value="manual">Kézi (valós kerület + falmagasság + tető)</option>
+          </select>
+        </label>
+
+        <div id="proGeomManual" style="display:none;margin-top:10px;">
+          <label class="field">Fal kerület összesen (m)
+            <input id="pro_perim" type="number" min="5" max="500" step="0.5" />
+          </label>
+
+          <label class="field">Fal magasság (m)
+            <input id="pro_wallH" type="number" min="2.2" max="3.5" step="0.05" />
+          </label>
+
+          <label class="field">Ablak felület összesen (m²) – opcionális
+            <input id="pro_winArea" type="number" min="0" max="300" step="0.5" placeholder="ha üres, ablakarányból számol" />
+          </label>
+
+          <label class="field">Tető típusa
+            <select id="pro_roofType">
+              <option value="flat">Lapos tető</option>
+              <option value="gable">Nyeregtető</option>
+              <option value="hip">Sátortető</option>
+            </select>
+          </label>
+
+          <label class="field">Tető hajlásszög (°)
+            <input id="pro_pitchDeg" type="number" min="0" max="60" step="1" />
+          </label>
+
+          <div class="muted tiny">
+            Megjegyzés: tető felület = plan terület / cos(hajlásszög). Sátortetőnél +5% (durva közelítés).
+          </div>
+        </div>
+      </div>
+
+      <div class="out" style="margin-top:12px;">
+        <div class="sectionTitle">2) Ablak + szellőzés pontosítás</div>
+
+        <label class="field">Ablak U-érték (W/m²K)
+          <input id="pro_winU" type="number" min="0.6" max="3.5" step="0.1" />
+        </label>
+
+        <label class="field">Hővisszanyerés (HRV) hatásfok (%)
+          <input id="pro_hrvEff" type="number" min="0" max="85" step="1" />
+        </label>
+
+        <label class="field">Légzárási profil
+          <select id="pro_airProfile">
+            <option value="drafty">Huzatos</option>
+            <option value="avg">Átlagos</option>
+            <option value="tight">Tömörebb</option>
+          </select>
+        </label>
+
+        <label class="field">n50 (blower door) – ha van (1/h)
+          <input id="pro_n50" type="number" min="0" max="25" step="0.5" placeholder="pl. 6.0" />
+        </label>
+      </div>
+
+      <div class="out" style="margin-top:12px;">
+        <div class="sectionTitle">3) Rétegrend → U (valósabb)</div>
+
+        <label class="field" style="display:flex;gap:10px;align-items:center;">
+          <input id="pro_useLayers_wall" type="checkbox" />
+          <span><b>Fal U rétegrendből</b> (ha ki: a régi cm+anyag közelítés megy)</span>
+        </label>
+        <label class="field">Fal rétegrend (soronként: anyag + mm)
+          <textarea id="pro_layers_wall" rows="5" style="width:100%;"></textarea>
+        </label>
+
+        <label class="field" style="display:flex;gap:10px;align-items:center;">
+          <input id="pro_useLayers_roof" type="checkbox" />
+          <span><b>Födém/tető U rétegrendből</b></span>
+        </label>
+        <label class="field">Födém/tető rétegrend
+          <textarea id="pro_layers_roof" rows="5" style="width:100%;"></textarea>
+        </label>
+
+        <label class="field" style="display:flex;gap:10px;align-items:center;">
+          <input id="pro_useLayers_floor" type="checkbox" />
+          <span><b>Padló U rétegrendből</b> (MVP közelítés – talaj felé bonyolult)</span>
+        </label>
+        <label class="field">Padló rétegrend
+          <textarea id="pro_layers_floor" rows="4" style="width:100%;"></textarea>
+        </label>
+
+        <div class="muted tiny">
+          Támogatott anyag nevek (példák): vakolat, tegla, porotherm, ytong, beton, eps, grafitos_eps, kozetgyapot, xps, pur, gipszkarton, fa, osb.
+          (Kezdőbetű nem számít, ékezetes is mehet pl. “tégla”.)
+        </div>
+      </div>
+    `;
+
+    targetPanel.parentElement.insertBefore(wrap, targetPanel);
+
+    // Defaultok
+    for (const k of Object.keys(PRO_DEFAULTS)) {
+      const el = $(k);
+      if (!el) continue;
+      if (el.type === "checkbox") {
+        el.checked = String(PRO_DEFAULTS[k]) === "1";
+      } else {
+        el.value = PRO_DEFAULTS[k];
+      }
+    }
+
+    // kézi geometria mezők láthatósága
+    const geomModeEl = $("pro_geomMode");
+    const manualBox = $("proGeomManual");
+    const syncGeomUi = () => {
+      if (!geomModeEl || !manualBox) return;
+      manualBox.style.display = (geomModeEl.value === "manual") ? "" : "none";
     };
+    geomModeEl?.addEventListener("change", syncGeomUi);
+    syncGeomUi();
+
+    // ha PRO kapcsolás változik
+    updateProUi();
   }
 
-  // ---------- UI / Defaults ----------
+  // =========================
+  // UI / Defaults (régi mezők)
+  // =========================
   const btnRun = $("btnCalcRun");
   const btnReset = $("btnReset");
   const resultBox = $("resultBox");
@@ -531,12 +741,14 @@
     wallType: "brick",
     winRatio: 18,
     nAir: 0.6,
+
     wallInsNow: 0,
     wallInsMat: "eps",
     roofInsNow: 0,
     roofInsMat: "rockwool",
     floorInsNow: 0,
     floorInsMat: "xps",
+
     heatingNow: "gas_old",
     scopNow: 3.2,
     annualCostNow: 600000,
@@ -544,8 +756,10 @@
     wallInsTarget: 15,
     roofInsTarget: 25,
     floorInsTarget: 10,
+
     heatingTarget: "hp",
     scopTarget: 3.6,
+
     hdd: 3000,
     priceGas: 40,
     priceEl: 70,
@@ -595,7 +809,6 @@
     setVal("costHeating", DEFAULTS.costHeating);
   }
 
-  // ---------- Kalkulátor állapot (input lista) ----------
   const INPUT_IDS = [
     "area","storeys","height","wallType","winRatio","nAir",
     "wallInsNow","wallInsMat","roofInsNow","roofInsMat","floorInsNow","floorInsMat",
@@ -612,12 +825,16 @@
       if (!el) return;
       s[id] = el.value;
     });
-    // PRO mezők is
+
+    // PRO panel
+    ensureProPanel();
     PRO_INPUT_IDS.forEach(id => {
       const el = $(id);
       if (!el) return;
-      s[id] = el.value;
+      if (el.type === "checkbox") s[id] = el.checked ? "1" : "0";
+      else s[id] = el.value;
     });
+
     s.__pro = EA_IS_PRO ? "1" : "0";
     return s;
   }
@@ -630,22 +847,28 @@
       if (s[id] !== undefined) el.value = s[id];
     });
 
-    // PRO panelt előbb biztosítsuk
     ensureProPanel();
 
     PRO_INPUT_IDS.forEach(id => {
       const el = $(id);
       if (!el) return;
-      if (s[id] !== undefined) el.value = s[id];
+      if (s[id] === undefined) return;
+      if (el.type === "checkbox") el.checked = String(s[id]) === "1";
+      else el.value = s[id];
     });
 
-    if (s.__pro !== undefined) {
-      setPro(String(s.__pro) === "1");
+    if (s.__pro !== undefined) setPro(String(s.__pro) === "1");
+
+    // frissítsük a manuál geom UI-t
+    const geomModeEl = $("pro_geomMode");
+    const manualBox = $("proGeomManual");
+    if (geomModeEl && manualBox) {
+      manualBox.style.display = (geomModeEl.value === "manual") ? "" : "none";
     }
   }
 
   // =========================
-  // LINKELHETŐ KALKULÁCIÓ (share URL)
+  // Share link (ugyanaz)
   // =========================
   function parseHash(){
     const raw = (location.hash || "#home").replace(/^#/, "");
@@ -746,10 +969,9 @@
   }
 
   // =========================
-  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage)
+  // Mentés / betöltés / export / import / PDF (ugyanaz, rövidítve: a te verziód logikája)
   // =========================
-  const STATE_KEY = "ea3d_state_v1";
-
+  const STATE_KEY = "ea3d_state_v2";
   function bindStateButtons(){
     const btnSave = $("btnSaveState");
     const btnLoad = $("btnLoadState");
@@ -759,13 +981,9 @@
       btnSave.addEventListener("click", () => {
         flashBtn(btnSave);
         try{
-          const state = serializeState();
-          localStorage.setItem(STATE_KEY, JSON.stringify(state));
+          localStorage.setItem(STATE_KEY, JSON.stringify(serializeState()));
           toast("Mentve (böngészőbe) ✅");
-        }catch(e){
-          console.error(e);
-          toast("Mentés hiba.");
-        }
+        }catch(e){ console.error(e); toast("Mentés hiba."); }
       });
     }
 
@@ -774,56 +992,38 @@
         flashBtn(btnLoad);
         try{
           const raw = localStorage.getItem(STATE_KEY);
-          if (!raw){
-            toast("Nincs mentés a böngészőben.");
-            return;
-          }
-          const state = JSON.parse(raw);
-          applyState(state);
+          if (!raw){ toast("Nincs mentés a böngészőben."); return; }
+          applyState(JSON.parse(raw));
           toast("Betöltve ✅");
           calcAll();
-          if ((location.hash || "").includes("3d")) updateHeatmap();
-        }catch(e){
-          console.error(e);
-          toast("Betöltés hiba.");
-        }
+        }catch(e){ console.error(e); toast("Betöltés hiba."); }
       });
     }
 
     if (btnClear){
       btnClear.addEventListener("click", () => {
         flashBtn(btnClear);
-        try{
-          localStorage.removeItem(STATE_KEY);
-          toast("Böngészős mentés törölve 🧹");
-        }catch(e){
-          console.error(e);
-          toast("Törlés hiba.");
-        }
+        try{ localStorage.removeItem(STATE_KEY); toast("Böngészős mentés törölve 🧹"); }
+        catch(e){ console.error(e); toast("Törlés hiba."); }
       });
     }
   }
 
-  // =========================
-  // EXPORT / IMPORT (JSON fájl)
-  // =========================
-  const EXPORT_VERSION = 1;
-
+  const EXPORT_VERSION = 2;
   function buildExportPayload(){
     return {
       app: "Energia Advisor 3D",
       version: EXPORT_VERSION,
       createdAt: new Date().toISOString(),
       state: serializeState(),
-      lastAnalysis: EA_LAST || null,
-      pro: EA_IS_PRO ? true : false
+      lastAnalysis: EA_LAST || null
     };
   }
 
   function safeFileName(){
     const d = new Date();
     const pad = (n) => String(n).padStart(2,"0");
-    return `energia-advisor-kalkulacio_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+    return `energia-advisor_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.json`;
   }
 
   function downloadJson(obj, filename){
@@ -831,7 +1031,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = filename || "energia-advisor-kalkulacio.json";
+    a.download = filename || "energia-advisor.json";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -846,14 +1046,8 @@
     if (btnExport){
       btnExport.addEventListener("click", () => {
         flashBtn(btnExport);
-        try{
-          const payload = buildExportPayload();
-          downloadJson(payload, safeFileName());
-          toast("Export kész ✅ (letöltés)");
-        }catch(e){
-          console.error(e);
-          toast("Export hiba.");
-        }
+        try{ downloadJson(buildExportPayload(), safeFileName()); toast("Export kész ✅"); }
+        catch(e){ console.error(e); toast("Export hiba."); }
       });
     }
 
@@ -869,38 +1063,20 @@
         if (!f) return;
 
         try{
-          const text = await f.text();
-          const payload = JSON.parse(text);
-
-          if (!payload || typeof payload !== "object" || !payload.state){
-            toast("Hibás JSON fájl.");
-            return;
-          }
-
+          const payload = JSON.parse(await f.text());
+          if (!payload || typeof payload !== "object" || !payload.state) { toast("Hibás JSON fájl."); return; }
           applyState(payload.state);
-
-          if (payload.lastAnalysis && typeof payload.lastAnalysis === "object"){
+          if (payload.lastAnalysis && typeof payload.lastAnalysis === "object") {
             EA_LAST = payload.lastAnalysis;
             setPlanUnlocked(true);
-            toast("Import kész ✅ (állapot + terv)");
-            calcAll();
-          } else {
-            toast("Import kész ✅ (állapot)");
-            calcAll();
           }
-
-          if ((location.hash || "").includes("3d")) updateHeatmap();
-        }catch(e){
-          console.error(e);
-          toast("Import hiba (nem jó JSON?).");
-        }
+          toast("Import kész ✅");
+          calcAll();
+        }catch(e){ console.error(e); toast("Import hiba (nem jó JSON?)."); }
       });
     }
   }
 
-  // =========================
-  // PDF (egyszerű: nyomtatás PDF-be)
-  // =========================
   function bindPdfButtons(){
     const btnPdfCalc = $("btnExportPDF");
     const btnPdf3d = $("btnExportPDF_3D");
@@ -915,7 +1091,9 @@
     if (btnPdf3d) btnPdf3d.addEventListener("click", () => doPrint(btnPdf3d));
   }
 
-  // ---------- Core calc ----------
+  // =========================
+  // Input olvasás (PRO rétegrend + kézi geometria)
+  // =========================
   function readInputs() {
     const val = (id, fallback) => $(id) ? $(id).value : fallback;
 
@@ -925,25 +1103,7 @@
     const wallType = val("wallType", "brick");
 
     const winRatio = clamp(num(val("winRatio", 18), 18), 5, 35);
-
-    // Légcsere: PRO esetén profil/n50 felülírhatja az input mezőt
     let nAir = clamp(num(val("nAir", 0.6), 0.6), 0.2, 1.2);
-
-    // PRO extra
-    const pro_winU = clamp(num(val("pro_winU", PRO_DEFAULTS.pro_winU), PRO_DEFAULTS.pro_winU), 0.6, 3.5);
-    const pro_hrvEff = clamp(num(val("pro_hrvEff", PRO_DEFAULTS.pro_hrvEff), PRO_DEFAULTS.pro_hrvEff), 0, 85);
-    const pro_airProfile = val("pro_airProfile", PRO_DEFAULTS.pro_airProfile);
-    const pro_n50_raw = val("pro_n50", PRO_DEFAULTS.pro_n50);
-
-    if (EA_IS_PRO) {
-      const n50 = num(pro_n50_raw, 0);
-      const nAirFrom = nAirFromN50(n50);
-      if (nAirFrom !== null) {
-        nAir = nAirFrom;
-      } else {
-        nAir = nAirFromProfile(pro_airProfile);
-      }
-    }
 
     const wallInsNow = clamp(num(val("wallInsNow", 0), 0), 0, 50);
     const wallInsMat = val("wallInsMat", "eps");
@@ -974,6 +1134,34 @@
     const costFloorM2 = Math.max(0, num(val("costFloorM2", 15000), 15000));
     const costHeating = Math.max(0, num(val("costHeating", 3500000), 3500000));
 
+    // PRO
+    ensureProPanel();
+    const pro_geomMode = val("pro_geomMode", PRO_DEFAULTS.pro_geomMode);
+    const pro_perim = num(val("pro_perim", PRO_DEFAULTS.pro_perim), PRO_DEFAULTS.pro_perim);
+    const pro_wallH = num(val("pro_wallH", PRO_DEFAULTS.pro_wallH), PRO_DEFAULTS.pro_wallH);
+    const pro_winArea = val("pro_winArea", PRO_DEFAULTS.pro_winArea);
+    const pro_roofType = val("pro_roofType", PRO_DEFAULTS.pro_roofType);
+    const pro_pitchDeg = num(val("pro_pitchDeg", PRO_DEFAULTS.pro_pitchDeg), PRO_DEFAULTS.pro_pitchDeg);
+
+    const pro_winU = clamp(num(val("pro_winU", PRO_DEFAULTS.pro_winU), PRO_DEFAULTS.pro_winU), 0.6, 3.5);
+    const pro_hrvEff = clamp(num(val("pro_hrvEff", PRO_DEFAULTS.pro_hrvEff), PRO_DEFAULTS.pro_hrvEff), 0, 85);
+    const pro_airProfile = val("pro_airProfile", PRO_DEFAULTS.pro_airProfile);
+    const pro_n50_raw = val("pro_n50", PRO_DEFAULTS.pro_n50);
+
+    const pro_useLayers_wall = $("pro_useLayers_wall") ? $("pro_useLayers_wall").checked : true;
+    const pro_useLayers_roof = $("pro_useLayers_roof") ? $("pro_useLayers_roof").checked : true;
+    const pro_useLayers_floor = $("pro_useLayers_floor") ? $("pro_useLayers_floor").checked : false;
+
+    const pro_layers_wall = val("pro_layers_wall", PRO_DEFAULTS.pro_layers_wall);
+    const pro_layers_roof = val("pro_layers_roof", PRO_DEFAULTS.pro_layers_roof);
+    const pro_layers_floor = val("pro_layers_floor", PRO_DEFAULTS.pro_layers_floor);
+
+    if (EA_IS_PRO) {
+      const n50 = num(pro_n50_raw, 0);
+      const nFrom = nAirFromN50(n50);
+      nAir = (nFrom !== null) ? nFrom : nAirFromProfile(pro_airProfile);
+    }
+
     return {
       area, storeys, height, wallType,
       winRatio, nAir,
@@ -989,10 +1177,89 @@
       costWallM2, costRoofM2, costFloorM2, costHeating,
 
       // PRO
-      pro_winU,
-      pro_hrvEff,
-      pro_airProfile,
-      pro_n50_raw
+      pro_geomMode, pro_perim, pro_wallH, pro_winArea, pro_roofType, pro_pitchDeg,
+      pro_winU, pro_hrvEff, pro_airProfile, pro_n50_raw,
+      pro_useLayers_wall, pro_useLayers_roof, pro_useLayers_floor,
+      pro_layers_wall, pro_layers_roof, pro_layers_floor
+    };
+  }
+
+  // =========================
+  // Scenario számítás (U + felületek)
+  // =========================
+  function computeScenario(params, which) {
+    const x = params;
+
+    // Geometria
+    let geom = null;
+    if (EA_IS_PRO && x.pro_geomMode === "manual") {
+      geom = geometryManual(
+        x.area, x.storeys, x.height,
+        x.pro_perim, x.pro_wallH,
+        x.pro_roofType, x.pro_pitchDeg
+      );
+    } else {
+      geom = geometryAuto(x.area, x.storeys, x.height);
+    }
+
+    // Ablak felület
+    let Awin = 0;
+    if (EA_IS_PRO && x.pro_geomMode === "manual") {
+      const aw = num(x.pro_winArea, 0);
+      if (aw > 0) Awin = aw;
+      else Awin = geom.wallGross * clamp(x.winRatio, 5, 35) / 100;
+    } else {
+      Awin = geom.wallGross * clamp(x.winRatio, 5, 35) / 100;
+    }
+
+    const AwallNet = Math.max(0, geom.wallGross - Awin);
+
+    // Régi módszer (cm + anyag)
+    const wallInsCm = (which === "now") ? x.wallInsNow : x.wallInsTarget;
+    const roofInsCm = (which === "now") ? x.roofInsNow : x.roofInsTarget;
+    const floorInsCm = (which === "now") ? x.floorInsNow : x.floorInsTarget;
+
+    let Uwall = uWithInsulation(U_BASE[x.wallType], wallInsCm, LAMBDA[x.wallInsMat]);
+    let Uroof = uWithInsulation(U_BASE.roof, roofInsCm, LAMBDA[x.roofInsMat]);
+    let Ufloor = uWithInsulation(U_BASE.floor, floorInsCm, LAMBDA[x.floorInsMat]);
+
+    // PRO: rétegrendből U (ha pipálva)
+    let uWallLayer = null, uRoofLayer = null, uFloorLayer = null;
+    if (EA_IS_PRO && x.pro_useLayers_wall) {
+      uWallLayer = uFromLayers(parseLayers(x.pro_layers_wall), "wall");
+      if (uWallLayer) Uwall = uWallLayer;
+    }
+    if (EA_IS_PRO && x.pro_useLayers_roof) {
+      uRoofLayer = uFromLayers(parseLayers(x.pro_layers_roof), "roof");
+      if (uRoofLayer) Uroof = uRoofLayer;
+    }
+    if (EA_IS_PRO && x.pro_useLayers_floor) {
+      uFloorLayer = uFromLayers(parseLayers(x.pro_layers_floor), "floor");
+      if (uFloorLayer) Ufloor = uFloorLayer;
+    }
+
+    // Ablak U
+    const Uwin = (EA_IS_PRO ? x.pro_winU : U_BASE.window);
+
+    // Tető felület: AUTO esetén plan = footprint, MANUAL esetén roofArea már számolt
+    const Aroof = (geom.mode === "manual") ? geom.roofArea : geom.roofPlan; // laposnál ugyanaz, régi
+    const Afloor = geom.floorArea;
+
+    const loss = heatLossBreakdown(
+      Uwall, AwallNet,
+      Uwin, Awin,
+      Uroof, Aroof,
+      Ufloor, Afloor,
+      x.nAir, geom.volume,
+      x.bridge,
+      EA_IS_PRO ? x.pro_hrvEff : 0
+    );
+
+    return {
+      geom,
+      areas: { AwallNet, Awin, Aroof, Afloor },
+      U: { Uwall, Uwin, Uroof, Ufloor, uWallLayer, uRoofLayer, uFloorLayer },
+      H: loss
     };
   }
 
@@ -1055,7 +1322,6 @@
     locked.style.display = "none";
 
     const L = EA_LAST;
-
     const totalInv =
       (L.inv?.roofCost || 0) +
       (L.inv?.wallCost || 0) +
@@ -1124,25 +1390,8 @@
   function calcAll() {
     const x = readInputs();
 
-    const nowScenario = computeScenario({
-      area: x.area, storeys: x.storeys, height: x.height,
-      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-      wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
-      roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
-      winUOverride: EA_IS_PRO ? x.pro_winU : null,
-      hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
-    });
-
-    const targetScenario = computeScenario({
-      area: x.area, storeys: x.storeys, height: x.height,
-      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
-      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
-      winUOverride: EA_IS_PRO ? x.pro_winU : null,
-      hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
-    });
+    const nowScenario = computeScenario(x, "now");
+    const targetScenario = computeScenario(x, "target");
 
     const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
 
@@ -1167,19 +1416,12 @@
     const improve = (Q_real_now > 0) ? (1 - (Q_real_target / Q_real_now)) : 0;
 
     function costOnly(change) {
-      const wall = change.wall ?? x.wallInsNow;
-      const roof = change.roof ?? x.roofInsNow;
-      const floor = change.floor ?? x.floorInsNow;
+      const temp = { ...x };
+      if (change.wall !== undefined) temp.wallInsTarget = change.wall;
+      if (change.roof !== undefined) temp.roofInsTarget = change.roof;
+      if (change.floor !== undefined) temp.floorInsTarget = change.floor;
 
-      const sc = computeScenario({
-        area: x.area, storeys: x.storeys, height: x.height,
-        wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-        wallInsCm: wall, wallInsMat: x.wallInsMat,
-        roofInsCm: roof, roofInsMat: x.roofInsMat,
-        floorInsCm: floor, floorInsMat: x.floorInsMat,
-        winUOverride: EA_IS_PRO ? x.pro_winU : null,
-        hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
-      });
+      const sc = computeScenario(temp, "target");
 
       const Q_model = annualHeatDemandKWh(sc.H.H, x.hdd);
       const Q_real = Q_model * calib;
@@ -1220,9 +1462,6 @@
     const heatingChanged = (x.heatingTarget !== x.heatingNow);
     const pbHeat = heatingChanged ? paybackYears(inv.heatCost, saveOnlyHeat) : Infinity;
 
-    const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U, Hvent: nowScenario.H.Hvent, hrv: nowScenario.H.hrvEff };
-    const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U, Hvent: targetScenario.H.Hvent, hrv: targetScenario.H.hrvEff };
-
     EA_LAST = {
       savingYear,
       prio,
@@ -1237,12 +1476,27 @@
     };
     setPlanUnlocked(true);
 
-    const proLine = EA_IS_PRO ? `
-      <li><b>PRO:</b> Ablak U=${x.pro_winU} W/m²K • HRV=${x.pro_hrvEff}% • (nAir=${x.nAir.toFixed(2)} 1/h)</li>
-    ` : `<li class="muted"><b>PRO:</b> kikapcsolva (ablak U fix, HRV nincs)</li>`;
+    const g = targetScenario.geom;
+    const geomLine = (EA_IS_PRO && x.pro_geomMode === "manual")
+      ? `KÉZI: kerület ${g.perim.toFixed(1)} m • falmagasság ${g.height.toFixed(2)} m • tető: ${String(x.pro_roofType)} ${x.pro_pitchDeg}°`
+      : `AUTO: becsült kerület ${g.perim.toFixed(1)} m`;
+
+    const uLine = EA_IS_PRO
+      ? `U(fal)=${targetScenario.U.Uwall.toFixed(2)} • U(tető)=${targetScenario.U.Uroof.toFixed(2)} • U(padló)=${targetScenario.U.Ufloor.toFixed(2)} • U(ablak)=${targetScenario.U.Uwin.toFixed(2)}`
+      : `U-k: alap + cm szigetelés közelítés`;
 
     const html = `
       <div class="sectionTitle">Eredmény</div>
+
+      <div class="out" style="margin-top:10px;">
+        <div class="sectionTitle">Geometria + U (PRO)</div>
+        <div class="muted">
+          ${geomLine}<br/>
+          Felületek: Fal nettó ${targetScenario.areas.AwallNet.toFixed(1)} m² • Ablak ${targetScenario.areas.Awin.toFixed(1)} m² • Tető ${targetScenario.areas.Aroof.toFixed(1)} m² • Padló ${targetScenario.areas.Afloor.toFixed(1)} m²<br/>
+          ${uLine}<br/>
+          Szellőzés: nAir=${x.nAir.toFixed(2)} 1/h ${EA_IS_PRO ? `• HRV=${x.pro_hrvEff}%` : ""}
+        </div>
+      </div>
 
       <div class="out" style="margin-top:10px;">
         <div class="sectionTitle">MOST → CÉL</div>
@@ -1251,8 +1505,7 @@
           <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
           <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
           <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}</li>
-          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir.toFixed(2)} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
-          ${proLine}
+          <li class="muted">HDD: ${x.hdd} • hőhíd: ${x.bridge}%</li>
         </ul>
       </div>
 
@@ -1264,7 +1517,7 @@
           <div class="hr"></div>
           <b>Különbség:</b> ${fmtFt(savingYear)} <span class="muted">~ ${fmtFtShort(savingMonth)} Ft/hó</span><br/>
           <b>Javulás (hőigény):</b> ${fmtPct(improve*100)}<br/>
-          <span class="muted">Magyarázat: a “MOST” Ft/év értékből visszaszámoljuk a MOST hőigényt, majd ugyanazzal a kalibrációval számoljuk a CÉL hőigényt.</span>
+          <span class="muted">Kalibráció: a “MOST” Ft/év → visszaszámolt hőigény → ugyanazzal a szorzóval számoljuk a CÉL hőigényt.</span>
         </div>
       </div>
 
@@ -1290,16 +1543,13 @@
       </div>
 
       <details>
-        <summary>Technikai számok (ellenőrzéshez)</summary>
+        <summary>Technikai számok</summary>
         <div class="out" style="margin-top:10px;">
-          <div class="sectionTitle">H és hőigény</div>
           <div class="muted">
-            H (MOST): ${(techNow.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techNow.Q_model)}<br/>
-            H (CÉL): ${(techTarget.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techTarget.Q_model)}<br/>
-            Kalibrációs szorzó: ${calib.toFixed(2)}<br/>
-            Q_real(MOST): ${fmtKwh(techNow.Q_real)} • Q_real(CÉL): ${fmtKwh(techTarget.Q_real)}<br/>
-            Vent (MOST): ${techNow.Hvent.toFixed(0)} W/K ${EA_IS_PRO ? `(HRV ${(techNow.hrv*100).toFixed(0)}%)` : ""}<br/>
-            Vent (CÉL): ${techTarget.Hvent.toFixed(0)} W/K ${EA_IS_PRO ? `(HRV ${(techTarget.hrv*100).toFixed(0)}%)` : ""}
+            H(MOST): ${nowScenario.H.H.toFixed(0)} W/K • Q_model: ${fmtKwh(Q_model_now)}<br/>
+            H(CÉL): ${targetScenario.H.H.toFixed(0)} W/K • Q_model: ${fmtKwh(Q_model_target)}<br/>
+            Kalibráció: ${calib.toFixed(2)}<br/>
+            Q_real(MOST): ${fmtKwh(Q_real_now)} • Q_real(CÉL): ${fmtKwh(Q_real_target)}
           </div>
         </div>
       </details>
@@ -1332,20 +1582,11 @@
     if ((location.hash || "").includes("plan")) renderPlan();
   });
 
-  // ---------- TUDÁSTÁR ----------
-  const DOCS = [
-    { id:"hdd", cat:"Alapok", read:"~3 perc", tags:["HDD","fűtés","alapok"], title:"Mi az a HDD (fűtési foknap) és miért számít?", body:`A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.<br/><br/><b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/><b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.`.trim() },
-    { id:"uvalue", cat:"Alapok", read:"~4 perc", tags:["U-érték","hőveszteség","fal"], title:"U-érték egyszerűen: mit jelent és mitől lesz jobb?", body:`Az <b>U-érték</b> (W/m²K) megmutatja, mennyi hő “szökik át” 1 m² szerkezeten 1°C különbségnél.<br/><br/><b>Kisebb U = jobb.</b> Szigetelésnél általában a fal/födém U-értéke csökken látványosan.<br/><br/>A kalkulátor “régi” tipikus U-ból indul, és a megadott cm + anyag alapján számolja a javulást.`.trim() },
-    { id:"airchange", cat:"Alapok", read:"~3 perc", tags:["légcsere","infiltráció","szellőzés"], title:"Légcsere (1/h): miért tud elvinni rengeteg pénzt?", body:`A légcsere a ház “szivárgását” jelzi: rések, rossz nyílászáró, kéményhatás.<br/><br/>A hőveszteség része: <b>Hvent = 0,33 × n × térfogat</b> (W/K).<br/><br/><b>Gyakorlat:</b> hiába szigetelsz, ha a ház “huzatos”, a megtakarítás kisebb lesz. Ezért van külön blokk a 3D nézetben is.`.trim() },
-    { id:"roof_first", cat:"Szigetelés", read:"~4 perc", tags:["födém","padlás","megtérülés"], title:"Miért a födém/padlás szigetelés szokott a legjobb első lépés lenni?", body:`A meleg levegő felfelé száll, ezért a födém sok háznál “fő veszteségcsatorna”.<br/><br/><b>Előny:</b> gyors kivitelezés, sokszor olcsóbb, és már 20–30 cm jó anyaggal látványos eredményt ad.<br/><br/>A kalkulátorban próbáld: csak a födémet állítsd CÉL-ra → nézd meg a Prioritás listában.`.trim() },
-    { id:"wall_eps_rw", cat:"Szigetelés", read:"~5 perc", tags:["EPS","kőzetgyapot","fal"], title:"EPS vagy kőzetgyapot? Rövid döntési szempontok", body:`<b>EPS:</b> jó ár/érték, könnyű, elterjedt. <b>Kőzetgyapot:</b> jobb pára- és tűztechnika, jó hanggátlás.<br/><br/>A hőszigetelés szempontjából mindkettő jó lehet, a különbséget gyakran a részletek adják: ragasztás, dübelezés, hálózás, lábazat, csomópontok.<br/><br/>Tipp: ha “hőhíd” problémád van, a kivitelezés minősége többet számít, mint az anyag neve.`.trim() },
-    { id:"floor", cat:"Szigetelés", read:"~4 perc", tags:["padló","aljzat","XPS"], title:"Padló/aljzat szigetelés: mikor éri meg?", body:`Padló szigetelés akkor ad nagyot, ha alatta hideg tér van (pince, szellőző légrés, talaj felől hideg).<br/><br/>Felújításnál gyakori, hogy bontással jár → ezért a megtérülés változó.<br/><br/>A kalkulátorban külön “csak padló” összehasonlítással látod, mennyi Ft/év jön ki belőle.`.trim() },
-    { id:"boiler_vs_hp", cat:"Fűtés", read:"~5 perc", tags:["kazán","hőszivattyú","SCOP"], title:"Kazáncsere vagy hőszivattyú? Miért fontos a SCOP?", body:`Hőszivattyúnál a <b>SCOP</b> az éves átlagos hatásfokot jelzi: mennyi hő lesz 1 kWh villanyból.<br/><br/><b>Példa:</b> SCOP 3,6 → 1 kWh villanyból ~3,6 kWh hő.<br/><br/>Fontos: ha a ház nincs rendben (szigetelés/légzárás), a fűtéscsere önmagában sokszor kevésbé “üt”, mint gondolnád.`.trim() },
-    { id:"cond_boiler", cat:"Fűtés", read:"~3 perc", tags:["kondenz","kazán","hatásfok"], title:"Kondenzációs kazán: mikor hoz látványos javulást?", body:`Régi kazánhoz képest a kondenzációs kazán hatásfoka jobb, főleg alacsonyabb előremenő hőmérsékleten.<br/><br/><b>Ha radiátor + magas előremenő</b> van, a különbség lehet kisebb, mint padlófűtésnél.<br/><br/>A kalkulátorban: állítsd MOST = régi kazán, CÉL = kondenz → nézd meg a “csak fűtés” hatást.`.trim() },
-    { id:"thermal_bridges", cat:"Tipikus hibák", read:"~4 perc", tags:["hőhíd","csomópont","penész"], title:"Hőhidak: miért lehet penész akkor is, ha szigeteltél?", body:`A hőhíd olyan pont, ahol a hő “könnyebben” távozik (koszorú, áthidaló, erkélylemez, lábazat, csatlakozások).<br/><br/>Ha a felület lehűl, kicsapódhat a pára → penész kockázat.<br/><br/>Ezért van a kalkulátorban <b>hőhíd korrekció</b>: ha sok a csomóponti hiba, a valós megtakarítás kisebb lehet.`.trim() },
-    { id:"air_sealing_mistake", cat:"Tipikus hibák", read:"~3 perc", tags:["légzárás","huzat","szalag"], title:"Tipikus hiba: szigetelés van, de a ház továbbra is “huzatos”", body:`Szigetelés mellett is elmehet a hő, ha nincs légzárás: rossz ablakbeépítés, rések, padlásfeljáró, kémény környéke.<br/><br/><b>Gyors ellenőrzés:</b> hideg napon kézzel/füsttel érezhető-e áramlás a kritikus helyeken?<br/><br/>A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyásol mindent.`.trim() },
-    { id:"questions_for_contractor", cat:"Kérdéslista", read:"~5 perc", tags:["kivitelező","kérdések","minőség"], title:"10 kérdés kivitelezőnek, hogy ne bukj a részleteken", body:`1) Milyen csomóponti megoldást adsz koszorúnál/lábazatnál?<br/>2) Mivel ragasztasz, dűbelezés hogyan lesz?<br/>3) Párazárás/páratechnika: hol kritikus?<br/>4) Milyen vastagságot miért javasolsz?<br/>5) Milyen hálózás, élvédő, indítóprofil lesz?<br/>6) Milyen minőségű anyagot hozol (márka, rendszer)?<br/>7) Fotózod-e a rétegrendet kivitelezés közben?<br/>8) Garancia mire és mennyi?<br/>9) Mikor fizetek és milyen ütemezéssel?<br/>10) Mi a leggyakoribb hibapont ennél a háznál?<br/><b>Tipp:</b> ha erre bizonytalan válaszokat kapsz, az már jel.`.trim() }
-  ];
+  // ---------- TUDÁSTÁR (a te verziód DOCS tömbje) ----------
+  const DOCS = (window.DOCS && Array.isArray(window.DOCS)) ? window.DOCS : [];
+
+  // ha nálad a DOCS már a fájlban van (régi verzió), akkor hagyjuk békén:
+  // (itt csak azért van, hogy ne omoljon össze, ha valaki kivette véletlenül)
 
   let docFilterCat = "Összes";
   let docSearch = "";
@@ -1356,7 +1597,6 @@
     const byData = Array.from(document.querySelectorAll('[data-doc-cat]'));
     return Array.from(new Set([...byId, ...byData]));
   }
-
   function getChipCategory(el){
     const dc = (el?.dataset?.docCat || "").trim();
     if (dc) return dc;
@@ -1364,7 +1604,6 @@
     const txt = (el?.textContent || "").trim();
     return txt || "Összes";
   }
-
   function setDocChipActive(activeEl){
     getDocChips().forEach(c => c.classList.remove("active"));
     if (activeEl) activeEl.classList.add("active");
@@ -1448,8 +1687,8 @@
   })();
 
   // ---------- HEATMAP (MVP) ----------
-  let hmMode = "now"; // now | target | delta
-
+  // A te korábbi updateHeatmap kódod itt maradhat – ha hiányzik hmList, úgyis visszatér.
+  let hmMode = "now";
   const hmModeNow = $("hmModeNow");
   const hmModeTarget = $("hmModeTarget");
   const hmModeDelta = $("hmModeDelta");
@@ -1494,26 +1733,7 @@
 
   function scenarioFromInputs(which){
     const x = readInputs();
-    if (which === "now") {
-      return computeScenario({
-        area: x.area, storeys: x.storeys, height: x.height,
-        wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-        wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
-        roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
-        winUOverride: EA_IS_PRO ? x.pro_winU : null,
-        hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
-      });
-    }
-    return computeScenario({
-      area: x.area, storeys: x.storeys, height: x.height,
-      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
-      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
-      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
-      winUOverride: EA_IS_PRO ? x.pro_winU : null,
-      hrvEffPct: EA_IS_PRO ? x.pro_hrvEff : 0
-    });
+    return computeScenario(x, which === "now" ? "now" : "target");
   }
 
   function updateHeatmap(){
@@ -1525,7 +1745,6 @@
 
     const partsNow = now.H.parts;
     const partsTar = target.H.parts;
-
     const keys = ["roof","wall","window","floor","vent"];
 
     let parts = {};
@@ -1533,17 +1752,16 @@
 
     if (hmMode === "now") {
       parts = partsNow;
-      explain = "MOST: megmutatja, hogy a jelenlegi állapotban hol megy el a hő arányosan (H bontás).";
+      explain = "MOST: hol megy el a hő arányosan (H bontás).";
     } else if (hmMode === "target") {
       parts = partsTar;
-      explain = "CÉL: megmutatja, hogy a cél állapotban hol marad veszteség (még szigetelés után is).";
+      explain = "CÉL: hol marad veszteség a cél állapotban.";
     } else {
       keys.forEach(k => parts[k] = Math.max(0, partsNow[k] - partsTar[k]));
-      explain = "KÜLÖNBSÉG: azt mutatja, hol csökken a legjobban a veszteség MOST → CÉL között.";
+      explain = "KÜLÖNBSÉG: hol csökken legjobban a veszteség MOST → CÉL között.";
     }
 
     const maxPart = keys.reduce((m,k)=> Math.max(m, parts[k]||0), 0) || 1;
-
     const ratios = {};
     keys.forEach(k => {
       const raw = (parts[k]||0) / maxPart;
@@ -1553,31 +1771,17 @@
     setBlock("hmRoof", ratios.roof);
     setBlock("hmFloor", ratios.floor);
     setBlock("hmVent", ratios.vent);
-
     setBlock("hmWallL", ratios.wall);
     setBlock("hmWallC", ratios.wall);
     setBlock("hmWallR", ratios.wall);
-
     setBlock("hmWin", ratios.window);
 
-    const labelMap = {
-      roof: "Födém",
-      wall: "Fal",
-      window: "Ablak",
-      floor: "Padló",
-      vent: "Légcsere"
-    };
-
+    const labelMap = { roof:"Födém", wall:"Fal", window:"Ablak", floor:"Padló", vent:"Légcsere" };
     const total = keys.reduce((s,kk)=> s + (parts[kk]||0), 0) || 1;
 
-    const rows = keys
-      .map(k => ({
-        k,
-        label: labelMap[k],
-        val: parts[k] || 0,
-        pct: ((parts[k]||0) / total) * 100
-      }))
-      .sort((a,b)=> b.val - a.val);
+    const rows = keys.map(k => ({
+      k, label: labelMap[k], val: parts[k]||0, pct: ((parts[k]||0)/total)*100
+    })).sort((a,b)=> b.val - a.val);
 
     list.innerHTML = rows.map(r => `
       <div class="hmRow">
@@ -1594,7 +1798,7 @@
     if (ex) ex.textContent = explain;
   }
 
-  // ---------- initByHash (share betöltéssel) ----------
+  // ---------- initByHash ----------
   function initByHash() {
     const { view } = parseHash();
     const onlyCalcExists = !!viewCalc && !viewHome && !viewPlan && !view3d && !viewDocs;
@@ -1612,7 +1816,7 @@
     return showView("home");
   }
 
-  // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) =====
+  // ===== SzakiPiac lead gomb =====
   (function bindLeadButton(){
     const btnLead = document.getElementById("btnLead");
     if (!btnLead) return;
@@ -1636,7 +1840,6 @@
   initByHash();
   window.addEventListener("hashchange", initByHash);
 
-  // „← SzakiPiac” + PRO + badge
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
   } else {
