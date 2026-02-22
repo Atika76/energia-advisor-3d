@@ -22,6 +22,7 @@
       <button id="btnHome" class="navBtn active">Kezdő</button>
       <button id="btnCalc" class="navBtn">Kalkulátor</button>
       <button id="btnPlan" class="navBtn" aria-disabled="true" title="Előbb futtasd az Elemzést.">Felújítási terv</button>
+      <button id="btnPro" class="navBtn">PRO</button>
       <button id="btn3d" class="navBtn">3D nézet</button>
       <button id="btnDocs" class="navBtn">Tudástár</button>
     </nav>
@@ -56,6 +57,7 @@
             <li>✅ “Csak X” összehasonlítás (fal / födém / padló / fűtés)</li>
             <li>✅ Beruházás + megtérülés (állítható helyi árakkal)</li>
             <li>✅ Felújítási terv: 3–5 lépés, forintosítva (Elemzés után)</li>
+            <li>✅ PRO geometria: valós m² / tetőtípus / alaprajz méret</li>
           </ul>
           <div class="chips">
             <span class="chip">UA + infiltráció</span>
@@ -75,15 +77,9 @@
         </div>
 
         <div class="headBtns">
-          <!-- Böngészős mentés -->
           <button id="btnSaveState" class="btn ghost">💾 Mentés</button>
           <button id="btnLoadState" class="btn ghost">📥 Betöltés</button>
           <button id="btnClearState" class="btn ghost">🧹 Törlés</button>
-
-          <!-- FÁJLOS export/import -->
-          <button id="btnExportState" class="btn ghost">⬇️ Export</button>
-          <button id="btnImportState" class="btn ghost">⬆️ Import</button>
-
           <button id="btnExportPDF" class="btn primary">🖨️ PDF</button>
         </div>
       </div>
@@ -268,7 +264,7 @@
       <div class="sectionHead">
         <div>
           <div class="sectionTitle">Felújítási terv generálása</div>
-          <div class="muted">Elemzés után aktiválható. A kalkulátor prioritás listájából és beruházási adataiból dolgozik.</div>
+          <div class="muted">Elemzés után aktiválható. A prioritás listából és beruházási adatokból dolgozik.</div>
         </div>
         <div class="headBtns">
           <button id="btnExportPDF_Plan" class="btn ghost" onclick="window.print()">🖨️ PDF</button>
@@ -282,6 +278,83 @@
       </div>
 
       <div id="planBox"></div>
+    </section>
+
+    <!-- PRO -->
+    <section id="viewPro" class="card" style="display:none;">
+      <div class="sectionHead">
+        <div>
+          <div class="sectionTitle">PRO geometria (pontosabb m² számítás)</div>
+          <div class="muted">A PRO mód felülírja az automatikus “négyzet ház” közelítést, így a fal/födém/padló m² és a beruházás reálisabb lesz.</div>
+        </div>
+        <div class="headBtns">
+          <button class="btn ghost" id="btnProExplain">ℹ️ Hogyan számol?</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panelTitle">PRO mód</div>
+
+        <label class="field" style="display:flex;align-items:center;gap:10px;">
+          <input id="proEnabled" type="checkbox" />
+          <span><b>PRO geometria bekapcsolása</b> (ha nincs bepipálva, a rendszer a normál közelítést használja)</span>
+        </label>
+
+        <div class="grid2" style="margin-top:10px;">
+          <div class="panel" style="margin:0;">
+            <div class="panelTitle">Alaprajz / fal</div>
+
+            <div class="grid2">
+              <label class="field">Hossz (m)
+                <input id="proLen" type="number" min="0" step="0.1" placeholder="pl. 12.0" />
+              </label>
+              <label class="field">Szélesség (m)
+                <input id="proWid" type="number" min="0" step="0.1" placeholder="pl. 8.0" />
+              </label>
+            </div>
+
+            <label class="field">Külső fal teljes hossza / kerület (m) – opcionális
+              <input id="proPerim" type="number" min="0" step="0.1" placeholder="ha tudod a kerületet, írd be" />
+            </label>
+
+            <label class="field">Nettó szigetelendő fal felület (m²) – opcionális (legpontosabb)
+              <input id="proWallNetArea" type="number" min="0" step="0.1" placeholder="ablakok LEVONVA (nettó fal m²)" />
+            </label>
+
+            <div class="tiny muted">
+              Prioritás: <b>nettó fal m²</b> → <b>kerület</b> → <b>hossz×szélesség</b> → automata.
+              Ha nettó fal m²-t adsz meg, az ablakfelületet a “Ablak arány (%)” alapján visszaszámoljuk.
+            </div>
+          </div>
+
+          <div class="panel" style="margin:0;">
+            <div class="panelTitle">Tető</div>
+
+            <label class="field">Tetőtípus
+              <select id="proRoofType">
+                <option value="flat">Lapostető</option>
+                <option value="gable">Nyeregtető</option>
+              </select>
+            </label>
+
+            <label class="field">Tetőszorzó (nyeregnél) – pl. 1.15–1.30
+              <input id="proRoofFactor" type="number" min="1.0" max="1.6" step="0.01" value="1.15" />
+            </label>
+
+            <div class="miniCard" style="margin-top:12px;">
+              <div class="miniTitle">Megjegyzés</div>
+              <div class="muted">
+                Lapostetőnél a födém m² = footprint. Nyeregnél a födém m² = footprint × tetőszorzó.
+                A padló m² mindig footprint.
+              </div>
+            </div>
+
+            <div id="proSummary" class="out" style="margin-top:12px;">
+              <div class="muted">PRO összegzés itt jelenik meg (Elemzés után).</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 3D -->
@@ -383,9 +456,6 @@
       Megjegyzés: döntéstámogatás. A számítások becslések, a valóságban a szerkezetek, légzárás, hőhidak, árak és szokások erősen befolyásolnak.
     </div>
   </main>
-
-  <!-- Import fájlválasztó (rejtett) -->
-  <input id="eaImportFile" type="file" accept="application/json" style="display:none" />
 
   <script src="main.js"></script>
 </body>
