@@ -19,9 +19,9 @@
     </div>
 
     <nav class="nav">
-      <!-- ✅ A SzakiPiac gombot innen kiszedtük, mert a main.js úgyis beszúrja (különben duplázódik) -->
       <button id="btnHome" class="navBtn active">Kezdő</button>
       <button id="btnCalc" class="navBtn">Kalkulátor</button>
+      <button id="btnPlan" class="navBtn" aria-disabled="true" title="Előbb futtasd az Elemzést.">Felújítási terv</button>
       <button id="btn3d" class="navBtn">3D nézet</button>
       <button id="btnDocs" class="navBtn">Tudástár</button>
     </nav>
@@ -55,6 +55,7 @@
             <li>✅ Prioritás: mi hozza a legtöbb Ft/év megtakarítást</li>
             <li>✅ “Csak X” összehasonlítás (fal / födém / padló / fűtés)</li>
             <li>✅ Beruházás + megtérülés (állítható helyi árakkal)</li>
+            <li>✅ Felújítási terv: 3–5 lépés, forintosítva (Elemzés után)</li>
           </ul>
           <div class="chips">
             <span class="chip">UA + infiltráció</span>
@@ -254,6 +255,27 @@
         <div class="sectionTitle">Eredmény</div>
         <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
       </div>
+    </section>
+
+    <!-- PLAN (ÚJ NÉZET) -->
+    <section id="viewPlan" class="card" style="display:none;">
+      <div class="sectionHead">
+        <div>
+          <div class="sectionTitle">Felújítási terv generálása</div>
+          <div class="muted">Elemzés után aktiválható. A kalkulátor prioritás listájából és beruházási adataiból dolgozik.</div>
+        </div>
+        <div class="headBtns">
+          <button id="btnExportPDF_Plan" class="btn ghost" onclick="window.print()">🖨️ PDF</button>
+        </div>
+      </div>
+
+      <div id="planLockedNote" class="out">
+        <div class="muted">
+          Előbb futtasd az <b>Elemzést</b> a Kalkulátorban. Utána itt megjelenik a 3–5 lépéses, forintosított terv.
+        </div>
+      </div>
+
+      <div id="planBox"></div>
     </section>
 
     <!-- 3D -->
