@@ -65,12 +65,40 @@ body{
   border-radius:999px;
   cursor:pointer;
   transition: 0.15s ease;
+  user-select:none;
 }
 .navBtn:hover{background: rgba(255,255,255,0.10)}
 .navBtn.active{
   outline: 2px solid rgba(109,208,255,0.35);
   background: rgba(109,208,255,0.12);
   border-color: rgba(109,208,255,0.25);
+}
+
+/* ✅ Tiltott nav gomb: JS-hez és aria-hoz is */
+.navBtn[aria-disabled="true"],
+.navBtn.isDisabled{
+  opacity:0.45;
+  cursor:not-allowed;
+  pointer-events:none;
+  filter:saturate(0.75);
+}
+
+/* ✅ “busy/flash” anim (flashBtn() használja) */
+.navBtn.isBusy,
+.btn.isBusy,
+.chipBtn.isBusy{
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.28);
+  outline: 2px solid rgba(109,208,255,0.22);
+}
+
+/* ✅ PRO gomb finom megkülönböztetése (a JS úgyis zöldre állítja ON-nál) */
+#btnPro{
+  border-color: rgba(123,123,255,0.25);
+  background: rgba(123,123,255,0.10);
+}
+#btnPro:hover{
+  background: rgba(123,123,255,0.14);
 }
 
 .wrap{max-width:1120px; margin:18px auto 46px; padding:0 14px;}
@@ -88,6 +116,7 @@ body{
 @media (max-width: 920px){
   .hero{grid-template-columns:1fr}
   .nav{flex-wrap:wrap; justify-content:flex-end}
+  .navBtn{padding:9px 12px}
 }
 
 .pill{
@@ -130,6 +159,7 @@ h1{
   transition: 0.15s ease;
 }
 .btn:hover{background: var(--btn2)}
+.btn:active{transform: translateY(1px);}
 .btn.primary{
   border-color: rgba(109,208,255,0.25);
   background: rgba(109,208,255,0.14);
@@ -227,6 +257,12 @@ h1{
   margin-top:10px;
 }
 .hr{height:1px; background: rgba(255,255,255,0.10); margin:10px 0}
+
+/* details nyitásnál kicsit jobban látszódjon */
+details[open]{
+  border-color: rgba(109,208,255,0.22);
+  box-shadow: 0 0 0 2px rgba(109,208,255,0.10);
+}
 
 .hmModes{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 12px;}
 .chipBtn{
@@ -392,7 +428,9 @@ body.embed .navbar {
 /* csak a kalkulátor látszódjon */
 body.embed #viewHome,
 body.embed #view3d,
-body.embed #viewDocs {
+body.embed #viewDocs,
+body.embed #viewPlan,
+body.embed #viewPro {
   display: none !important;
 }
 
