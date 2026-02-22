@@ -6,6 +6,10 @@
    - LINKELHETŐ KALKULÁCIÓ (share link): #calc&share=...
    - FELÚJÍTÁSI TERV nézet (#plan) elemzés után
    - Export/Import JSON fájlba (letöltés/fájlválasztó)
+
+   + PRO mód (kérés szerint):
+   - 1 db PRO gomb (zöld ha ON, kiírja: PRO ON)
+   - PRO ON esetén: geometria + tetőforma mezők aktívak, és ezek alapján számolunk
 */
 
 (function () {
@@ -88,6 +92,7 @@
   const btnPlan = $("btnPlan");
   const btn3d = $("btn3d");
   const btnDocs = $("btnDocs");
+  const btnPro = $("btnPro");
 
   const viewHome = $("viewHome");
   const viewCalc = $("viewCalc");
@@ -126,7 +131,6 @@
   if (btnHome) btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
   if (btnCalc) btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (btnPlan) btnPlan.addEventListener("click", () => {
-    // ha még nincs elemzés, ne engedjük
     if (!EA_PLAN_UNLOCKED) {
       toast("Előbb futtasd az Elemzést a Kalkulátorban.");
       return;
@@ -163,7 +167,6 @@
     a.href = SZAKIPIAC_HOME_URL;
     a.textContent = "← SzakiPiac";
 
-    // Nav-gomb stílus átvétele
     a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
 
     if (!a.className) {
@@ -183,6 +186,54 @@
     a.style.whiteSpace = "nowrap";
 
     navGroup.insertBefore(a, refBtn);
+  }
+
+  // =========================
+  // PRO (1 db gomb, ON/OFF)
+  // =========================
+  function isProOn() {
+    const h = $("proOn");
+    return h && String(h.value) === "1";
+  }
+
+  function setProOn(on) {
+    const h = $("proOn");
+    if (h) h.value = on ? "1" : "0";
+    updateProUI();
+  }
+
+  function updateProUI() {
+    const on = isProOn();
+
+    const proFields = $("proFields");
+    const proBadge = $("proBadge");
+
+    if (proFields) proFields.style.display = on ? "" : "none";
+    if (proBadge) proBadge.style.display = on ? "" : "none";
+
+    if (btnPro) {
+      if (on) {
+        btnPro.textContent = "PRO ON";
+        btnPro.style.background = "rgba(34,197,94,.25)";
+        btnPro.style.borderColor = "rgba(34,197,94,.55)";
+        btnPro.style.color = "#d9ffe8";
+      } else {
+        btnPro.textContent = "PRO";
+        btnPro.style.background = "";
+        btnPro.style.borderColor = "";
+        btnPro.style.color = "";
+      }
+    }
+  }
+
+  if (btnPro) {
+    btnPro.addEventListener("click", () => {
+      const on = !isProOn();
+      setProOn(on);
+      toast(on ? "PRO bekapcsolva ✅" : "PRO kikapcsolva");
+      // ha épp 3D-ben vagyunk, frissüljön
+      if ((location.hash || "").includes("3d")) updateHeatmap();
+    });
   }
 
   // ---------- Material lambdas (W/mK) ----------
@@ -217,18 +268,69 @@
     return 1 / (r0 + rIns);
   }
 
-  function geometry(areaTotal, storeys, height) {
+  // ====== PRO geometria (tetőforma) ======
+  function roofAreaFromType(footprint, roofType, pitchDeg) {
+    const fp = Math.max(0.1, footprint);
+    const t = clamp(num(pitchDeg, 0), 0, 60);
+
+    if (roofType === "flat" || t <= 0) return fp;
+
+    const rad = (t * Math.PI) / 180;
+    const c = Math.cos(rad);
+    const k = c > 0.15 ? (1 / c) : (1 / 0.15);
+
+    // egyszerű, stabil becslés (nyeregnél elég jó; sátortetőnél közelítés)
+    // fp / cos(pitch)
+    return fp * k;
+  }
+
+  function geometry(areaTotal, storeys, height, pro) {
     const s = clamp(storeys, 1, 3);
-    const footprint = areaTotal / s;
-    const side = Math.sqrt(Math.max(footprint, 1));
-    const perim = 4 * side;
+
+    // alap footprint (m²)
+    let footprint = areaTotal / s;
+
+    let hasLenWid = false;
+    let len = 0, wid = 0;
+    if (pro && pro.on) {
+      len = Math.max(0, num(pro.len, 0));
+      wid = Math.max(0, num(pro.wid, 0));
+      if (len > 0 && wid > 0) {
+        footprint = len * wid;
+        hasLenWid = true;
+      }
+    }
+
+    // kerület
+    let perim = 0;
+    if (hasLenWid) {
+      perim = 2 * (len + wid);
+    } else {
+      const perimInput = pro && pro.on ? Math.max(0, num(pro.perim, 0)) : 0;
+      if (perimInput > 0) {
+        perim = perimInput;
+      } else {
+        const side = Math.sqrt(Math.max(footprint, 1));
+        perim = 4 * side;
+      }
+    }
 
     const wallGross = perim * height * s;
-    const roofArea = footprint;
+
+    // tető / födém felület (m²)
+    let roofArea = footprint;
+    if (pro && pro.on) {
+      roofArea = roofAreaFromType(
+        footprint,
+        pro.roofType || "flat",
+        pro.roofPitch
+      );
+    }
+
     const floorArea = footprint;
     const volume = footprint * height * s;
 
-    return { footprint, side, perim, wallGross, roofArea, floorArea, volume };
+    return { footprint, perim, wallGross, roofArea, floorArea, volume, storeys: s };
   }
 
   function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct) {
@@ -287,11 +389,18 @@
       wallType, winRatio, nAir, bridgePct,
       wallInsCm, wallInsMat,
       roofInsCm, roofInsMat,
-      floorInsCm, floorInsMat
+      floorInsCm, floorInsMat,
+      pro // {on,len,wid,perim,winArea,roofType,roofPitch}
     } = params;
 
-    const g = geometry(area, storeys, height);
-    const Awin = g.wallGross * clamp(winRatio, 5, 35) / 100;
+    const g = geometry(area, storeys, height, pro);
+
+    // ablak felület: PRO-ban megadható fix m²
+    const proWinArea = (pro && pro.on) ? Math.max(0, num(pro.winArea, 0)) : 0;
+    const Awin = proWinArea > 0
+      ? proWinArea
+      : (g.wallGross * clamp(winRatio, 5, 35) / 100);
+
     const AwallNet = Math.max(0, g.wallGross - Awin);
 
     const Uwall = uWithInsulation(U_BASE[wallType], wallInsCm, LAMBDA[wallInsMat]);
@@ -322,6 +431,16 @@
   const resultBox = $("resultBox");
 
   const DEFAULTS = {
+    // PRO
+    proOn: "0",
+    proLen: "",
+    proWid: "",
+    proPerim: "",
+    proWinArea: "",
+    roofType: "flat",
+    roofPitch: 30,
+
+    // alap
     area: 100,
     storeys: 1,
     height: 2.6,
@@ -357,6 +476,15 @@
   function setDefaults() {
     const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
 
+    // PRO
+    setVal("proOn", DEFAULTS.proOn);
+    setVal("proLen", DEFAULTS.proLen);
+    setVal("proWid", DEFAULTS.proWid);
+    setVal("proPerim", DEFAULTS.proPerim);
+    setVal("proWinArea", DEFAULTS.proWinArea);
+    setVal("roofType", DEFAULTS.roofType);
+    setVal("roofPitch", DEFAULTS.roofPitch);
+
     setVal("area", DEFAULTS.area);
     setVal("storeys", String(DEFAULTS.storeys));
     setVal("height", DEFAULTS.height);
@@ -390,10 +518,16 @@
     setVal("costRoofM2", DEFAULTS.costRoofM2);
     setVal("costFloorM2", DEFAULTS.costFloorM2);
     setVal("costHeating", DEFAULTS.costHeating);
+
+    updateProUI();
   }
 
   // ---------- Kalkulátor állapot (input lista) ----------
   const INPUT_IDS = [
+    // PRO
+    "proOn","proLen","proWid","proPerim","proWinArea","roofType","roofPitch",
+
+    // alap
     "area","storeys","height","wallType","winRatio","nAir",
     "wallInsNow","wallInsMat","roofInsNow","roofInsMat","floorInsNow","floorInsMat",
     "heatingNow","scopNow","annualCostNow",
@@ -419,6 +553,7 @@
       if (!el) return;
       if (s[id] !== undefined) el.value = s[id];
     });
+    updateProUI();
   }
 
   // =========================
@@ -523,7 +658,7 @@
   }
 
   // =========================
-  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage) – gyors, böngészőben
+  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage)
   // =========================
   const STATE_KEY = "ea3d_state_v1";
 
@@ -558,7 +693,7 @@
           const state = JSON.parse(raw);
           applyState(state);
           toast("Betöltve ✅");
-          calcAll(); // frissítünk mindent + feloldjuk a tervet
+          calcAll();
           if ((location.hash || "").includes("3d")) updateHeatmap();
         }catch(e){
           console.error(e);
@@ -592,7 +727,6 @@
       version: EXPORT_VERSION,
       createdAt: new Date().toISOString(),
       state: serializeState(),
-      // mentjük az utolsó elemzést is, hogy a terv azonnal meglegyen
       lastAnalysis: EA_LAST || null
     };
   }
@@ -637,7 +771,7 @@
     if (btnImport && fileInput){
       btnImport.addEventListener("click", () => {
         flashBtn(btnImport);
-        fileInput.value = ""; // ugyanazt a fájlt is engedje újra
+        fileInput.value = "";
         fileInput.click();
       });
 
@@ -649,7 +783,6 @@
           const text = await f.text();
           const payload = JSON.parse(text);
 
-          // Minimális ellenőrzés
           if (!payload || typeof payload !== "object" || !payload.state){
             toast("Hibás JSON fájl.");
             return;
@@ -657,19 +790,16 @@
 
           applyState(payload.state);
 
-          // ha mentve volt elemzés, visszatöltjük – különben újraszámoljuk
           if (payload.lastAnalysis && typeof payload.lastAnalysis === "object"){
             EA_LAST = payload.lastAnalysis;
             setPlanUnlocked(true);
             toast("Import kész ✅ (állapot + terv)");
-            // eredmény kirajzolása: biztonság kedvéért újraszámolunk is
             calcAll();
           } else {
             toast("Import kész ✅ (állapot)");
-            calcAll(); // számoljuk újra -> terv is lesz
+            calcAll();
           }
 
-          // ha épp 3D-ben vagyunk frissüljön
           if ((location.hash || "").includes("3d")) updateHeatmap();
         }catch(e){
           console.error(e);
@@ -680,7 +810,7 @@
   }
 
   // =========================
-  // PDF (egyszerű: nyomtatás PDF-be)
+  // PDF
   // =========================
   function bindPdfButtons(){
     const btnPdfCalc = $("btnExportPDF");
@@ -699,6 +829,15 @@
   // ---------- Core calc ----------
   function readInputs() {
     const val = (id, fallback) => $(id) ? $(id).value : fallback;
+
+    // PRO
+    const proOn = String(val("proOn", "0")) === "1";
+    const proLen = num(val("proLen", 0), 0);
+    const proWid = num(val("proWid", 0), 0);
+    const proPerim = num(val("proPerim", 0), 0);
+    const proWinArea = num(val("proWinArea", 0), 0);
+    const roofType = val("roofType", "flat");
+    const roofPitch = clamp(num(val("roofPitch", 30), 30), 0, 60);
 
     const area = clamp(num(val("area", 100), 100), 20, 1000);
     const storeys = clamp(num(val("storeys", 1), 1), 1, 3);
@@ -738,6 +877,10 @@
     const costHeating = Math.max(0, num(val("costHeating", 3500000), 3500000));
 
     return {
+      // PRO
+      proOn, proLen, proWid, proPerim, proWinArea, roofType, roofPitch,
+
+      // alap
       area, storeys, height, wallType,
       winRatio, nAir,
       wallInsNow, wallInsMat,
@@ -772,8 +915,8 @@
   }
 
   // ====== Felújítási terv állapot ======
-  let EA_LAST = null;            // utolsó elemzés összefoglalója
-  let EA_PLAN_UNLOCKED = false;  // terv gomb aktív-e
+  let EA_LAST = null;
+  let EA_PLAN_UNLOCKED = false;
 
   function setPlanUnlocked(on){
     EA_PLAN_UNLOCKED = !!on;
@@ -868,7 +1011,6 @@
       </div>
     `;
 
-    // terv alatti gomb
     const btnLeadPlan = $("btnLeadPlan");
     if (btnLeadPlan){
       btnLeadPlan.addEventListener("click", () => {
@@ -882,12 +1024,23 @@
   function calcAll() {
     const x = readInputs();
 
+    const proObj = {
+      on: x.proOn,
+      len: x.proLen,
+      wid: x.proWid,
+      perim: x.proPerim,
+      winArea: x.proWinArea,
+      roofType: x.roofType,
+      roofPitch: x.roofPitch
+    };
+
     const nowScenario = computeScenario({
       area: x.area, storeys: x.storeys, height: x.height,
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
       wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
       roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
+      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
+      pro: proObj
     });
 
     const targetScenario = computeScenario({
@@ -895,7 +1048,8 @@
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
       wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
       roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
+      pro: proObj
     });
 
     const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
@@ -930,7 +1084,8 @@
         wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
         wallInsCm: wall, wallInsMat: x.wallInsMat,
         roofInsCm: roof, roofInsMat: x.roofInsMat,
-        floorInsCm: floor, floorInsMat: x.floorInsMat
+        floorInsCm: floor, floorInsMat: x.floorInsMat,
+        pro: proObj
       });
 
       const Q_model = annualHeatDemandKWh(sc.H.H, x.hdd);
@@ -975,13 +1130,11 @@
     const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
     const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
 
-    // mentjük a tervhez szükséges minimumot
     EA_LAST = {
       savingYear,
       prio,
       inv,
       heatingChanged,
-      // map a terv lépésekhez
       invMap: {
         "Födém/padlás": inv.roofCost,
         "Fal": inv.wallCost,
@@ -991,17 +1144,23 @@
     };
     setPlanUnlocked(true);
 
+    const roofLabel = (x.roofType === "flat") ? "Lapos" : (x.roofType === "gable" ? "Nyeregtető" : "Sátortető");
+    const proLine = x.proOn
+      ? `<li><b>PRO geometria:</b> ${roofLabel} • hajlásszög: ${x.roofPitch}° • ablak: ${x.proWinArea > 0 ? `${x.proWinArea} m² (fix)` : `${x.winRatio}%`} </li>`
+      : "";
+
     const html = `
       <div class="sectionTitle">Eredmény</div>
 
       <div class="out" style="margin-top:10px;">
         <div class="sectionTitle">MOST → CÉL</div>
         <ul>
+          ${proLine}
           <li><b>Fal:</b> ${x.wallInsNow} cm → ${x.wallInsTarget} cm (${x.wallInsMat.toUpperCase()})</li>
           <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
           <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
           <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}</li>
-          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
+          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • hőhíd: ${x.bridge}%</li>
         </ul>
       </div>
 
@@ -1054,7 +1213,6 @@
 
     renderResult(html);
 
-    // ha terv nézeten vagyunk, frissítsük rögtön
     if ((location.hash || "").includes("plan")) renderPlan();
     if ((location.hash || "").includes("3d")) updateHeatmap();
   }
@@ -1196,7 +1354,7 @@
   })();
 
   // ---------- HEATMAP (MVP) ----------
-  let hmMode = "now"; // now | target | delta
+  let hmMode = "now";
 
   const hmModeNow = $("hmModeNow");
   const hmModeTarget = $("hmModeTarget");
@@ -1242,13 +1400,24 @@
 
   function scenarioFromInputs(which){
     const x = readInputs();
+    const proObj = {
+      on: x.proOn,
+      len: x.proLen,
+      wid: x.proWid,
+      perim: x.proPerim,
+      winArea: x.proWinArea,
+      roofType: x.roofType,
+      roofPitch: x.roofPitch
+    };
+
     if (which === "now") {
       return computeScenario({
         area: x.area, storeys: x.storeys, height: x.height,
         wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
         wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
         roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
-        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
+        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
+        pro: proObj
       });
     }
     return computeScenario({
@@ -1256,7 +1425,8 @@
       wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
       wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
       roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
-      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
+      pro: proObj
     });
   }
 
@@ -1373,14 +1543,13 @@
   setPlanUnlocked(false);
 
   bindShareButton();
-  bindStateButtons();        // Mentés/Betöltés/Törlés (böngésző)
-  bindExportImportButtons(); // Export/Import (fájl)
-  bindPdfButtons();          // PDF
+  bindStateButtons();
+  bindExportImportButtons();
+  bindPdfButtons();
 
   initByHash();
   window.addEventListener("hashchange", initByHash);
 
-  // „← SzakiPiac” gomb
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
   } else {
