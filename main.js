@@ -92,7 +92,6 @@
     const btn = $("btnPro");
     if (btn) {
       btn.textContent = PRO_ON ? "PRO ON" : "PRO OFF";
-      // zöld hatás (CSS nélkül is)
       btn.style.background = PRO_ON ? "rgba(40,200,120,.22)" : "";
       btn.style.borderColor = PRO_ON ? "rgba(40,200,120,.55)" : "";
       btn.style.color = PRO_ON ? "#dfffee" : "";
@@ -102,11 +101,8 @@
     const note = $("proInlineNote");
     if (note) note.style.display = PRO_ON ? "" : "none";
 
-    // PRO oldal csak ON esetén értelmes
     const proView = $("viewPro");
-    if (proView) {
-      proView.style.opacity = PRO_ON ? "1" : "0.7";
-    }
+    if (proView) proView.style.opacity = PRO_ON ? "1" : "0.7";
   }
 
   function loadProState() {
@@ -195,11 +191,11 @@
       toast("PRO bekapcsolva ✅");
     } else {
       toast("PRO kikapcsolva.");
-      // vissza kalkulátorba, hogy egyértelmű legyen
       location.hash = "#calc";
       showView("calc");
+      // ha volt elemzés, frissítsük a kijelzett állapotot
+      if (EA_LAST) calcAll();
     }
-    // PRO váltás után frissítünk érzékenységet is
     renderProPanel();
   });
 
@@ -304,7 +300,6 @@
   }
 
   function suggestedBridgePct(year) {
-    // szándékosan “józan” skála: nem tud mindent, de nem ír hülyeséget
     if (!year || year < 1900) return 10;
     if (year < 1960) return 18;
     if (year < 1985) return 16;
@@ -318,19 +313,32 @@
     const hintEl = $("proBridgeHint");
     if (hintEl) hintEl.textContent = String(suggestedBridgePct(p.proYear));
 
-    // Szenzitivitás (ha van utolsó elemzés)
+    // Extra UX: ha PRO ON + van hossz/szél, jelezzük ha nagyon nem stimmel a megadott m²
+    if (PRO_ON && p.proLen > 0 && p.proWid > 0) {
+      const storeys = clamp(num(($("storeys") && $("storeys").value) || 1, 1), 1, 3);
+      const areaInput = num(($("area") && $("area").value) || 0, 0);
+      const areaFromProTotal = (p.proLen * p.proWid) * storeys;
+      if (areaInput > 0) {
+        const diff = Math.abs(areaInput - areaFromProTotal) / Math.max(areaFromProTotal, 1);
+        if (diff > 0.15) {
+          // csak jelzés, nem írjuk felül automatikusan
+          toast(`PRO: a hossz×szél×szintek ≈ ${Math.round(areaFromProTotal)} m², de a kalkulátorban ${Math.round(areaInput)} m² van.`);
+        }
+      }
+    }
+
     renderSensitivity();
   }
 
   function geometryBasic(areaTotal, storeys, height) {
     const s = clamp(storeys, 1, 3);
-    const footprint = areaTotal / s;
+    const footprint = areaTotal / s; // 1 szint alapterület
     const side = Math.sqrt(Math.max(footprint, 1));
     const perim = 4 * side;
 
     const wallGross = perim * height * s;
-    const roofArea = footprint;
-    const floorArea = footprint;
+    const roofArea = footprint;  // tető = footprint
+    const floorArea = footprint; // padló = footprint
     const volume = footprint * height * s;
 
     return { footprint, side, perim, wallGross, roofArea, floorArea, volume, mode: "BASIC" };
@@ -345,32 +353,35 @@
       return geometryBasic(areaFallback, storeys, height);
     }
 
-    // footprint: hossz/szél + eresz túlnyúlás (opcionális)
     const L = Math.max(0.1, p.proLen);
     const W = Math.max(0.1, p.proWid);
     const e = Math.max(0, p.proEaves || 0);
 
-    const footprint0 = L * W; // alapterület “tiszta”
-    const footprint = (L + 2 * e) * (W + 2 * e); // tető vetület (eresz)
-    const perim = (p.proPerim > 0) ? p.proPerim : 2 * (L + W); // fal kerület: túlnyúlás nem fal
+    // A PRO hossz×szél 1 szint footprint (nem össz!)
+    const footprintPerFloor = L * W;
 
-    // tető: vetület / cos(pitch) ha nem lapos
+    // Tető vetület ereszszel (tetőre)
+    const roofProjection = (L + 2 * e) * (W + 2 * e);
+
+    // Fal kerület (eresz nem fal)
+    const perim = (p.proPerim > 0) ? p.proPerim : 2 * (L + W);
+
+    // Tetőfelület: roofProjection / cos(pitch) (nem osztjuk szintekkel!)
     const pitchRad = (Math.PI / 180) * clamp(p.proPitch, 0, 60);
-    let roofArea = footprint0 / s; // alap: födém terület (szintenként)
+    let roofArea = footprintPerFloor;
     if (p.proRoofType === "flat" || pitchRad <= 0.0001) {
-      roofArea = footprint0 / s;
+      roofArea = footprintPerFloor;
     } else {
-      // a vízszintes vetület (alapterület) → tényleges felület
-      roofArea = (footprint / s) / Math.cos(pitchRad);
+      roofArea = roofProjection / Math.cos(pitchRad);
     }
 
-    const floorArea = footprint0 / s;
+    const floorArea = footprintPerFloor;
     const wallGross = perim * height * s;
-    const volume = (footprint0 / s) * height * s;
+    const volume = footprintPerFloor * height * s;
 
     return {
-      footprint: footprint0 / s,
-      side: Math.sqrt(Math.max((footprint0 / s), 1)),
+      footprint: footprintPerFloor,
+      side: Math.sqrt(Math.max(footprintPerFloor, 1)),
       perim,
       wallGross,
       roofArea,
@@ -443,7 +454,6 @@
 
     const g = (PRO_ON ? geometryPro(area, storeys, height) : geometryBasic(area, storeys, height));
 
-    // ablak: PRO-ban lehet fix m²
     const Awin = (winAreaOverride && winAreaOverride > 0)
       ? winAreaOverride
       : (g.wallGross * clamp(winRatio, 5, 35) / 100);
@@ -582,8 +592,6 @@
     "wallInsTarget","roofInsTarget","floorInsTarget","heatingTarget","scopTarget",
     "hdd","priceGas","priceEl",
     "bridge","costWallM2","costRoofM2","costFloorM2","costHeating",
-
-    // PRO state is separate, but PRO inputs are saved too:
     "proLen","proWid","proPerim","proRoofType","proPitch","proEaves",
     "proWinArea","proWinUTarget","proWinCost",
     "proYear"
@@ -1088,7 +1096,6 @@
       return;
     }
 
-    // ha nincs elemzés, akkor is megmutatjuk “Elemzés után lesz”
     if (!EA_LAST || !EA_LAST._meta) {
       box.innerHTML = `<div class="muted">Futtasd az <b>Elemzés</b>-t a Kalkulátorban – utána itt megjelenik a szenzitivitás.</div>`;
       return;
@@ -1139,7 +1146,7 @@
       roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
       floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat,
       winAreaOverride,
-      winUOverride: 0 // MOST ablak U marad “régi”
+      winUOverride: 0
     });
 
     const targetScenario = computeScenario({
@@ -1149,7 +1156,7 @@
       roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
       floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat,
       winAreaOverride,
-      winUOverride: winUOverrideTarget // CÉL ablak U (ha meg van adva)
+      winUOverride: winUOverrideTarget
     });
 
     const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
@@ -1203,7 +1210,6 @@
     const costOnlyFloor = costOnly({ floor: x.floorInsTarget });
     const costOnlyHeat = costOnly({ heating: x.heatingTarget, scop: x.scopTarget });
 
-    // PRO ablakcsere “csak ablak” (ha megadott cél U)
     const hasWinUpgrade = PRO_ON && (winUOverrideTarget > 0);
     const costOnlyWin = hasWinUpgrade ? costOnly({ winUOverride: winUOverrideTarget }) : costNow;
 
@@ -1228,7 +1234,6 @@
       { costWallM2: x.costWallM2, costRoofM2: x.costRoofM2, costFloorM2: x.costFloorM2, costHeating: x.costHeating }
     );
 
-    // PRO: ablak költség
     const winCost = (PRO_ON && x.pro.proWinCost > 0) ? x.pro.proWinCost : 0;
 
     const pbRoof = paybackYears(inv.roofCost, saveOnlyRoof);
@@ -1241,7 +1246,6 @@
     const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
     const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
 
-    // mentjük a tervhez szükséges minimumot
     EA_LAST = {
       savingYear,
       prio,
@@ -1254,7 +1258,6 @@
         "Fűtés": inv.heatCost,
         "Ablak": winCost
       },
-      // szenzitivitás meta
       _meta: buildSensitivityMeta(x, savingYear)
     };
     setPlanUnlocked(true);
@@ -1344,7 +1347,6 @@
       if (mut.priceElMul) xx.priceEl = xx.priceEl * mut.priceElMul;
       if (mut.scopMul) xx.scopTarget = clamp(xx.scopTarget * mut.scopMul, 2.2, 5.5);
 
-      // újraszámol “csak cél” irányban (stabil, nem bonyolult)
       const winAreaOverride = (PRO_ON && xx.pro.proWinArea > 0) ? xx.pro.proWinArea : 0;
       const winUOverrideTarget = (PRO_ON && xx.pro.proWinUTarget > 0) ? xx.pro.proWinUTarget : 0;
 
@@ -1412,7 +1414,7 @@
     renderProPanel();
   });
 
-  // ---------- TUDÁSTÁR (változatlan a tiédből) ----------
+  // ---------- TUDÁSTÁR (változatlan) ----------
   const DOCS = [
     { id:"hdd", cat:"Alapok", read:"~3 perc", tags:["HDD","fűtés","alapok"], title:"Mi az a HDD (fűtési foknap) és miért számít?", body:`A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.<br/><br/><b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/><b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.`.trim() },
     { id:"uvalue", cat:"Alapok", read:"~4 perc", tags:["U-érték","hőveszteség","fal"], title:"U-érték egyszerűen: mit jelent és mitől lesz jobb?", body:`Az <b>U-érték</b> (W/m²K) megmutatja, mennyi hő “szökik át” 1 m² szerkezeten 1°C különbségnél.<br/><br/><b>Kisebb U = jobb.</b> Szigetelésnél általában a fal/födém U-értéke csökken látványosan.<br/><br/>A kalkulátor “régi” tipikus U-ból indul, és a megadott cm + anyag alapján számolja a javulást.`.trim() },
@@ -1709,15 +1711,28 @@
   loadProState();
   setProUi(PRO_ON);
 
-  // PRO mezők változásra: frissítsük hint + szenzitivitást
+  // PRO mezők változásra: frissítsük hint + szenzitivitást + (ha volt elemzés) automatikus frissítés
   [
     "proLen","proWid","proPerim","proRoofType","proPitch","proEaves",
     "proWinArea","proWinUTarget","proWinCost","proYear","proAutoBridge"
   ].forEach(id => {
     const el = $(id);
     if (!el) return;
-    el.addEventListener("input", renderProPanel);
-    el.addEventListener("change", renderProPanel);
+    el.addEventListener("input", () => {
+      renderProPanel();
+      if (EA_LAST) {
+        // ha már volt Elemzés, a PRO változásra frissítünk, hogy ne legyen “vissza kell menni”
+        calcAll();
+        toast("PRO adatok mentve → eredmény frissítve ✅");
+      }
+    });
+    el.addEventListener("change", () => {
+      renderProPanel();
+      if (EA_LAST) {
+        calcAll();
+        toast("PRO adatok mentve → eredmény frissítve ✅");
+      }
+    });
   });
 
   bindShareButton();
