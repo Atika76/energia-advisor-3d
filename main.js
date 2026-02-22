@@ -1,1326 +1,1390 @@
-/* Energia Advisor 3D – main.js (HTML-hez igazítva)
-   - Navigáció (Kezdő/Calc/PRO/Plan/3D/Docs)
-   - SzakiPiac gomb automatikus beszúrása (ha nincs)
-   - Tudástár: cikklista + kereső + chip szűrés + cikk nézet
-   - 3D hőtérkép (MVP): MOST/CÉL/KÜLÖNBSÉG + bontás lista + gyors értelmezés
-   - Mentés/betöltés: LocalStorage
-   - Export/Import: JSON fájl letöltés + fájl kiválasztó
-   - PDF: window.print()
-   - PRO: geometriák + élő összegzés + PRO alkalmazás/kikapcsolás
+/* Energia Advisor 3D – Valós (C) kalkulátor
+   - UA + infiltráció + HDD
+   - Kalibrálás: a MOST Ft/év értéket bázisnak vesszük (hogy a modell "valós" legyen)
+   - Tudástár (kereső + kategóriák + cikk nézet)
+   - 3D nézet (MVP) = Profi hőtérkép MOST/CÉL/KÜLÖNBSÉG
+   - LINKELHETŐ KALKULÁCIÓ (share link): #calc&share=...
+   - FELÚJÍTÁSI TERV nézet (#plan) elemzés után
+   - Export/Import JSON fájlba (letöltés/fájlválasztó)
 */
 
 (function () {
-  "use strict";
-
-  // ---------------- helpers ----------------
   const $ = (id) => document.getElementById(id);
+
+  // =========================
+  // SZAKIPIAC VISSZA – KÖZÖS
+  // =========================
+  const SZAKIPIAC_HOME_URL = "https://szakipiac-2025.hu/#home";
+  function goToSzakipiacHome() {
+    window.location.href = SZAKIPIAC_HOME_URL;
+  }
+
+  // ---------- Helpers ----------
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const round = (v, d = 0) => {
-    const p = Math.pow(10, d);
-    return Math.round(v * p) / p;
+  const num = (v, fallback = 0) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : fallback;
   };
-  const fmt = (n) => (isFinite(n) ? n.toLocaleString("hu-HU") : "–");
-  const fmt1 = (n) => (isFinite(n) ? round(n, 1).toLocaleString("hu-HU") : "–");
 
-  // ---------------- config ----------------
-  const SZAKIPIAC_HOME_URL = "https://szakipiac-2025.hu";
-  const LS_KEY = "ea3d_state_v4";
-  const LS_LAST = "ea3d_last_result_v4";
-  const LS_DOCS = "ea3d_docs_v1";
-  const LS_HM_MODE = "ea3d_hm_mode_v1";
+  function fmtFt(v) {
+    const n = Math.round(v);
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " Ft";
+  }
+  function fmtFtShort(v) {
+    const n = Math.round(v);
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+  function fmtKwh(v) {
+    const n = Math.round(v);
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " kWh/év";
+  }
+  function fmtPct(v) {
+    return (Math.round(v * 10) / 10).toFixed(1) + "%";
+  }
+  function paybackYears(cost, savingPerYear) {
+    if (savingPerYear <= 0) return Infinity;
+    return cost / savingPerYear;
+  }
+  function fmtYears(y) {
+    if (!Number.isFinite(y)) return "–";
+    if (y > 99) return "99+ év";
+    return (Math.round(y * 10) / 10).toFixed(1) + " év";
+  }
 
-  // ---------------- views ----------------
-  const viewHome = $("viewHome");
-  const viewCalc = $("viewCalc");
-  const viewPro = $("viewPro");
-  const viewPlan = $("viewPlan");
-  const view3d = $("view3d");
-  const viewDocs = $("viewDocs");
+  function flashBtn(btn) {
+    if (!btn) return;
+    btn.classList.add("isBusy");
+    setTimeout(() => btn.classList.remove("isBusy"), 450);
+  }
 
-  // nav buttons
+  function toast(msg) {
+    let el = document.getElementById("eaToast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "eaToast";
+      el.style.cssText =
+        "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:rgba(10,16,30,.92);border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.45);color:#fff;padding:10px 14px;border-radius:12px;font-weight:600;z-index:9999;opacity:0;transition:opacity .18s ease";
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = "1";
+    clearTimeout(el._t);
+    el._t = setTimeout(() => {
+      el.style.opacity = "0";
+    }, 1400);
+  }
+
+  function scrollToResult() {
+    const resultBox = $("resultBox");
+    if (!resultBox) return;
+    resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ==============================
+  // NAV + NÉZETEK
+  // ==============================
   const btnHome = $("btnHome");
   const btnCalc = $("btnCalc");
-  const btnPro = $("btnPro");
   const btnPlan = $("btnPlan");
   const btn3d = $("btn3d");
   const btnDocs = $("btnDocs");
 
-  // home actions
+  const viewHome = $("viewHome");
+  const viewCalc = $("viewCalc");
+  const viewPlan = $("viewPlan");
+  const view3d = $("view3d");
+  const viewDocs = $("viewDocs");
+
   const homeGoCalc = $("homeGoCalc");
   const homeGoDocs = $("homeGoDocs");
 
-  // calc buttons
-  const btnCalcRun = $("btnCalcRun");
-  const btnReset = $("btnReset");
-  const btnShare = $("btnShare");
-  const btnLead = $("btnLead");
+  function setActive(btn) {
+    [btnHome, btnCalc, btnPlan, btn3d, btnDocs].forEach((b) => b && b.classList.remove("active"));
+    btn && btn.classList.add("active");
+  }
 
-  // calc header buttons (a te HTML-ed szerint!)
-  const btnSaveState = $("btnSaveState");
-  const btnLoadState = $("btnLoadState");
-  const btnClearState = $("btnClearState");
-  const btnExportState = $("btnExportState");
-  const btnImportState = $("btnImportState");
-  const btnExportPDF = $("btnExportPDF");
+  function showView(which) {
+    if (viewHome) viewHome.style.display = which === "home" ? "" : "none";
+    if (viewCalc) viewCalc.style.display = which === "calc" ? "" : "none";
+    if (viewPlan) viewPlan.style.display = which === "plan" ? "" : "none";
+    if (view3d) view3d.style.display = which === "3d" ? "" : "none";
+    if (viewDocs) viewDocs.style.display = which === "docs" ? "" : "none";
 
-  const resultBox = $("resultBox");
+    if (which === "home") setActive(btnHome);
+    if (which === "calc") setActive(btnCalc);
+    if (which === "plan") setActive(btnPlan);
+    if (which === "3d") setActive(btn3d);
+    if (which === "docs") setActive(btnDocs);
 
-  // plan
-  const planBox = $("planBox");
-  const planLockedNote = $("planLockedNote");
-  const btnExportPDF_Plan = $("btnExportPDF_Plan");
+    if (which === "docs") renderDocs();
+    if (which === "3d") updateHeatmap();
+    if (which === "plan") renderPlan();
 
-  // PRO
-  const btnProApply = $("btnProApply");
-  const btnProOff = $("btnProOff");
-  const proSummary = $("proSummary");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) {}
+  }
 
-  // 3D
-  const hmModeNow = $("hmModeNow");
-  const hmModeTarget = $("hmModeTarget");
-  const hmModeDelta = $("hmModeDelta");
-  const hmRoof = $("hmRoof");
-  const hmWallL = $("hmWallL");
-  const hmWallR = $("hmWallR");
-  const hmWin = $("hmWin");
-  const hmFloor = $("hmFloor");
-  const hmVent = $("hmVent");
-  const hmList = $("hmList");
-  const hmExplain = $("hmExplain");
-  const btnExportPDF_3D = $("btnExportPDF_3D");
-
-  // docs
-  const docSearch = $("docSearch");
-  const docList = $("docList");
-  const docView = $("docView");
-  const docCount = $("docCount");
-  const chipAll = $("docChipAll");
-  const chipBasics = $("docChipBasics");
-  const chipIns = $("docChipIns");
-  const chipHeat = $("docChipHeat");
-  const chipMist = $("docChipMist");
-  const chipList = $("docChipList");
-
-  // ---------------- state ----------------
-  let activeView = "home";
-  let activeDocCat = "all";
-  let activeDocId = null;
-  let hmMode = localStorage.getItem(LS_HM_MODE) || "now";
-
-  // ---------------- inject SzakiPiac button (if not present) ----------------
-  function ensureSzakiPiacButton() {
-    const nav = document.querySelector(".nav");
-    if (!nav) return;
-    if ($("btnSzakiPiac")) return;
-
-    const existing = Array.from(nav.querySelectorAll("button")).find((b) =>
-      (b.textContent || "").toLowerCase().includes("szakipiac")
-    );
-
-    if (existing) {
-      existing.id = existing.id || "btnSzakiPiac";
-      existing.addEventListener("click", () => (window.location.href = SZAKIPIAC_HOME_URL));
+  if (btnHome) btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
+  if (btnCalc) btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  if (btnPlan) btnPlan.addEventListener("click", () => {
+    // ha még nincs elemzés, ne engedjük
+    if (!EA_PLAN_UNLOCKED) {
+      toast("Előbb futtasd az Elemzést a Kalkulátorban.");
       return;
     }
+    location.hash = "#plan";
+    showView("plan");
+  });
+  if (btn3d) btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
+  if (btnDocs) btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
-    const b = document.createElement("button");
-    b.id = "btnSzakiPiac";
-    b.className = "navBtn";
-    b.type = "button";
-    b.textContent = "← SzakiPiac";
-    b.addEventListener("click", () => (window.location.href = SZAKIPIAC_HOME_URL));
-    nav.insertBefore(b, nav.firstChild);
-  }
+  if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
+  if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
-  // ---------------- view switching ----------------
-  function setActiveNav(btn) {
-    const navBtns = document.querySelectorAll(".navBtn");
-    navBtns.forEach((x) => x.classList.remove("active"));
-    if (btn) btn.classList.add("active");
-  }
+  // ==============================
+  // NAV: „← SzakiPiac” gomb beszúrás
+  // ==============================
+  function addBackToSzakipiacButton() {
+    if (document.getElementById("eaBackToSzakipiac")) return;
 
-  function hideAll() {
-    [viewHome, viewCalc, viewPro, viewPlan, view3d, viewDocs].filter(Boolean).forEach((v) => {
-      v.style.display = "none";
-    });
-  }
+    const refBtn =
+      document.getElementById("btnHome") ||
+      document.getElementById("btnCalc") ||
+      document.getElementById("btnPlan") ||
+      document.getElementById("btn3d") ||
+      document.getElementById("btnDocs");
 
-  function go(view) {
-    activeView = view;
-    hideAll();
+    if (!refBtn) return;
 
-    if (view === "home" && viewHome) {
-      viewHome.style.display = "";
-      setActiveNav(btnHome);
-      return;
-    }
+    const navGroup = refBtn.parentElement;
+    if (!navGroup) return;
 
-    if (view === "calc" && viewCalc) {
-      viewCalc.style.display = "";
-      setActiveNav(btnCalc);
-      updatePlanLock();
-      return;
-    }
-
-    if (view === "pro" && viewPro) {
-      viewPro.style.display = "";
-      setActiveNav(btnPro);
-      renderProSummary();
-      return;
-    }
-
-    if (view === "plan" && viewPlan) {
-      viewPlan.style.display = "";
-      setActiveNav(btnPlan);
-      updatePlanLock();
-      renderPlanFromLast();
-      return;
-    }
-
-    if (view === "3d" && view3d) {
-      view3d.style.display = "";
-      setActiveNav(btn3d);
-      renderHeatmapFromLast();
-      return;
-    }
-
-    if (view === "docs" && viewDocs) {
-      viewDocs.style.display = "";
-      setActiveNav(btnDocs);
-      renderDocs();
-      return;
-    }
-
-    // fallback
-    if (viewHome) {
-      viewHome.style.display = "";
-      setActiveNav(btnHome);
-    }
-  }
-
-  // ---------------- inputs ----------------
-  const inputIds = [
-    "area",
-    "storeys",
-    "height",
-    "wallType",
-    "winRatio",
-    "nAir",
-    "wallInsNow",
-    "wallInsMat",
-    "roofInsNow",
-    "roofInsMat",
-    "floorInsNow",
-    "floorInsMat",
-    "heatingNow",
-    "scopNow",
-    "annualCostNow",
-    "wallInsTarget",
-    "roofInsTarget",
-    "floorInsTarget",
-    "heatingTarget",
-    "scopTarget",
-    "hdd",
-    "priceGas",
-    "priceEl",
-    "bridge",
-    "costWallM2",
-    "costRoofM2",
-    "costFloorM2",
-    "costHeating",
-  ];
-
-  // PRO ids – a TE HTML-ed szerint
-  const proIds = [
-    "proEnabled",    // 0/1
-    "proSyncArea",   // 0/1
-    "proLen",
-    "proWid",
-    "proPerim",
-    "proWallArea",
-    "proWinArea",
-    "proRoofArea",
-    "proFloorArea",
-    "proVolume",
-    "proAreaTotal",
-  ];
-
-  function getVal(id) {
-    const el = $(id);
-    if (!el) return null;
-
-    if (el.tagName === "SELECT") return el.value;
-
-    const t = el.type || "";
-    if (t === "checkbox") return !!el.checked;
-
-    const v = el.value;
-    if (v === "" || v == null) return null;
-
-    const n = Number(v);
-    return isNaN(n) ? v : n;
-  }
-
-  function setVal(id, v) {
-    const el = $(id);
-    if (!el) return;
-
-    if (el.tagName === "SELECT") {
-      el.value = v ?? el.value;
-      return;
-    }
-
-    const t = el.type || "";
-    if (t === "checkbox") {
-      el.checked = !!v;
-      return;
-    }
-
-    el.value = v ?? "";
-  }
-
-  function defaults() {
-    return {
-      area: 100,
-      storeys: "1",
-      height: 2.6,
-      wallType: "brick",
-      winRatio: 18,
-      nAir: 0.6,
-
-      wallInsNow: 0,
-      wallInsMat: "eps",
-      roofInsNow: 0,
-      roofInsMat: "rockwool",
-      floorInsNow: 0,
-      floorInsMat: "xps",
-
-      heatingNow: "gas_old",
-      scopNow: 3.2,
-      annualCostNow: 600000,
-
-      wallInsTarget: 15,
-      roofInsTarget: 25,
-      floorInsTarget: 10,
-      heatingTarget: "hp",
-      scopTarget: 3.6,
-
-      hdd: 3000,
-      priceGas: 40,
-      priceEl: 70,
-
-      bridge: 10,
-      costWallM2: 150000,
-      costRoofM2: 120000,
-      costFloorM2: 150000,
-      costHeating: 3500000,
-
-      // PRO defaults (TE HTML-ed: 0/1)
-      proEnabled: "0",
-      proSyncArea: "1",
-      proLen: 10,
-      proWid: 10,
-      proPerim: 0,
-      proWallArea: 0,
-      proWinArea: 0,
-      proRoofArea: 0,
-      proFloorArea: 0,
-      proVolume: 0,
-      proAreaTotal: 0,
-    };
-  }
-
-  function collectState() {
-    const s = {};
-    inputIds.forEach((id) => (s[id] = getVal(id)));
-    proIds.forEach((id) => (s[id] = getVal(id)));
-    return s;
-  }
-
-  function applyState(s) {
-    if (!s) return;
-    inputIds.forEach((id) => {
-      if (Object.prototype.hasOwnProperty.call(s, id)) setVal(id, s[id]);
-    });
-    proIds.forEach((id) => {
-      if (Object.prototype.hasOwnProperty.call(s, id)) setVal(id, s[id]);
-    });
-  }
-
-  // ---------------- toast ----------------
-  let toastTimer = null;
-  function toast(msg) {
-    let t = $("ea_toast");
-    if (!t) {
-      t = document.createElement("div");
-      t.id = "ea_toast";
-      t.style.position = "fixed";
-      t.style.left = "50%";
-      t.style.bottom = "22px";
-      t.style.transform = "translateX(-50%)";
-      t.style.padding = "10px 14px";
-      t.style.borderRadius = "12px";
-      t.style.background = "rgba(15, 20, 35, 0.85)";
-      t.style.border = "1px solid rgba(255,255,255,0.12)";
-      t.style.color = "rgba(255,255,255,0.92)";
-      t.style.zIndex = "9999";
-      t.style.fontSize = "14px";
-      t.style.backdropFilter = "blur(10px)";
-      t.style.boxShadow = "0 12px 30px rgba(0,0,0,0.25)";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.style.opacity = "1";
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      if (t) t.style.opacity = "0";
-    }, 1400);
-  }
-
-  // ---------------- Export / Import ----------------
-  function downloadText(filename, text) {
-    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+    a.id = "eaBackToSzakipiac";
+    a.href = SZAKIPIAC_HOME_URL;
+    a.textContent = "← SzakiPiac";
 
-  function exportJson() {
-    const payload = { ver: 1, ts: new Date().toISOString(), state: collectState(), last: safeReadLast() };
-    downloadText("energia-advisor-mentes.json", JSON.stringify(payload, null, 2));
-    toast("Export kész (JSON letöltve).");
-  }
+    // Nav-gomb stílus átvétele
+    a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
 
-  function importJson() {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    inp.accept = "application/json";
-    inp.addEventListener("change", async () => {
-      const file = inp.files && inp.files[0];
-      if (!file) return;
-      try {
-        const txt = await file.text();
-        const payload = JSON.parse(txt);
-        if (payload && payload.state) {
-          applyState(payload.state);
-          saveStateLocal(false);
-          if (payload.last) saveLast(payload.last);
-          toast("Import sikeres.");
-          renderProSummary();
-          renderHeatmapFromLast();
-          updatePlanLock();
-        } else {
-          toast("Hibás fájl (nincs state).");
-        }
-      } catch {
-        toast("Hibás JSON.");
-      }
-    });
-    inp.click();
-  }
-
-  // ---------------- local save/load ----------------
-  function saveStateLocal(showToast = true) {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(collectState()));
-      if (showToast) toast("Mentve (helyben).");
-    } catch {
-      if (showToast) toast("Mentés hiba.");
+    if (!a.className) {
+      a.style.cssText = `
+        display:inline-flex;
+        align-items:center;
+        padding:10px 16px;
+        border-radius:999px;
+        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.15);
+        color:#eaf2ff;
+        text-decoration:none;
+        font-weight:600;
+        backdrop-filter: blur(6px);
+      `;
     }
+    a.style.whiteSpace = "nowrap";
+
+    navGroup.insertBefore(a, refBtn);
   }
 
-  function loadStateLocal() {
-    try {
-      const s = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-      if (s) {
-        applyState(s);
-        toast("Betöltve.");
-        renderProSummary();
-        updatePlanLock();
-        renderHeatmapFromLast();
-      } else {
-        toast("Nincs mentés.");
-      }
-    } catch {
-      toast("Betöltés hiba.");
-    }
-  }
+  // ---------- Material lambdas (W/mK) ----------
+  const LAMBDA = {
+    eps: 0.037,
+    rockwool: 0.039,
+    xps: 0.034
+  };
 
-  function clearStateLocal() {
-    localStorage.removeItem(LS_KEY);
-    toast("Mentés törölve.");
-  }
+  // Base U-values (W/m²K) for "régi" szerkezetek
+  const U_BASE = {
+    brick: 1.25,
+    adobe: 1.10,
+    concrete: 1.60,
+    roof: 1.60,
+    floor: 1.10,
+    window: 2.60
+  };
 
-  function saveLast(r) {
-    try {
-      localStorage.setItem(LS_LAST, JSON.stringify(r));
-    } catch {}
-  }
+  // fűtés hatásfok / COP
+  const HEAT = {
+    gas_old: { name: "Régi gázkazán", eff: 0.75 },
+    gas_cond: { name: "Kondenzációs gázkazán", eff: 0.92 },
+    hp: { name: "Hőszivattyú", eff: null }
+  };
 
-  function safeReadLast() {
-    try {
-      const x = localStorage.getItem(LS_LAST);
-      return x ? JSON.parse(x) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  // ---------------- model ----------------
-  function materialLambda(mat) {
-    if (mat === "eps") return 0.038;
-    if (mat === "xps") return 0.034;
-    if (mat === "rockwool") return 0.039;
-    return 0.038;
-  }
-
-  function baseUForWall(type) {
-    if (type === "adobe") return 1.1;
-    if (type === "concrete") return 1.4;
-    return 1.2;
-  }
-
-  function uAfterInsulation(uBase, insCm, mat) {
-    const d = Math.max(0, Number(insCm) || 0) / 100;
-    if (d <= 0) return uBase;
-    const lambda = materialLambda(mat);
-    const r0 = 1 / Math.max(0.0001, uBase);
-    const rIns = d / Math.max(0.0001, lambda);
+  function uWithInsulation(uBase, thicknessCm, lambda) {
+    const t = Math.max(0, thicknessCm) / 100;
+    if (t <= 0) return uBase;
+    const r0 = 1 / uBase;
+    const rIns = t / lambda;
     return 1 / (r0 + rIns);
   }
 
-  function geometryAUTO(s) {
-    const area = Math.max(1, Number(s.area) || 100);
-    const storeys = Math.max(1, Number(s.storeys) || 1);
-    const height = Math.max(2.2, Number(s.height) || 2.6);
-
-    const fp = area / storeys;
-    const side = Math.sqrt(fp);
+  function geometry(areaTotal, storeys, height) {
+    const s = clamp(storeys, 1, 3);
+    const footprint = areaTotal / s;
+    const side = Math.sqrt(Math.max(footprint, 1));
     const perim = 4 * side;
 
-    const wallGross = perim * height * storeys;
+    const wallGross = perim * height * s;
+    const roofArea = footprint;
+    const floorArea = footprint;
+    const volume = footprint * height * s;
 
-    const winRatio = clamp(Number(s.winRatio) || 18, 5, 40) / 100;
-    const winArea = wallGross * winRatio;
-    const wallNet = Math.max(0, wallGross - winArea);
-
-    const roofArea = fp;
-    const floorArea = fp;
-    const volume = fp * height * storeys;
-
-    return {
-      mode: "AUTO",
-      area,
-      storeys,
-      height,
-      footprint: fp,
-      perim,
-      wallGross,
-      winArea,
-      wallNet,
-      roofArea,
-      floorArea,
-      volume,
-    };
+    return { footprint, side, perim, wallGross, roofArea, floorArea, volume };
   }
 
-  function geometryPRO(s) {
-    const storeys = Math.max(1, Number(s.storeys) || 1);
-    const height = Math.max(2.2, Number(s.height) || 2.6);
+  function heatLossBreakdown(Uwall, Awall, Uwin, Awin, Uroof, Aroof, Ufloor, Afloor, nAir, volume, bridgePct) {
+    const H_wall = (Uwall * Awall);
+    const H_win  = (Uwin * Awin);
+    const H_roof = (Uroof * Aroof);
+    const H_floor= (Ufloor * Afloor);
+    const Htrans = H_wall + H_win + H_roof + H_floor;
+    const Hvent  = 0.33 * nAir * volume;
+    const bridge = 1 + (bridgePct / 100);
 
-    const len = Math.max(1, Number(s.proLen) || 10);
-    const wid = Math.max(1, Number(s.proWid) || 10);
-
-    const perimAuto = 2 * (len + wid);
-    const fpAuto = len * wid;
-
-    const perimOverride = Math.max(0, Number(s.proPerim) || 0);
-    const perim = perimOverride > 0 ? perimOverride : perimAuto;
-
-    const wallGrossAuto = perim * height * storeys;
-    const wallGrossOverride = Math.max(0, Number(s.proWallArea) || 0);
-    const wallGross = wallGrossOverride > 0 ? wallGrossOverride : wallGrossAuto;
-
-    const winOverride = Math.max(0, Number(s.proWinArea) || 0);
-    const winRatio = clamp(Number(s.winRatio) || 18, 5, 40) / 100;
-    const winArea = winOverride > 0 ? winOverride : wallGross * winRatio;
-
-    const wallNet = Math.max(0, wallGross - winArea);
-
-    const roofOverride = Math.max(0, Number(s.proRoofArea) || 0);
-    const roofArea = roofOverride > 0 ? roofOverride : fpAuto;
-
-    const floorOverride = Math.max(0, Number(s.proFloorArea) || 0);
-    const floorArea = floorOverride > 0 ? floorOverride : fpAuto;
-
-    const volOverride = Math.max(0, Number(s.proVolume) || 0);
-    const volume = volOverride > 0 ? volOverride : fpAuto * height * storeys;
-
-    const heatedAreaOverride = Math.max(0, Number(s.proAreaTotal) || 0);
-    const area = heatedAreaOverride > 0 ? heatedAreaOverride : (Number(s.area) || fpAuto * storeys);
-
-    return {
-      mode: "PRO",
-      area,
-      storeys,
-      height,
-      footprint: fpAuto,
-      perim,
-      wallGross,
-      winArea,
-      wallNet,
-      roofArea,
-      floorArea,
-      volume,
-      len,
-      wid,
+    const parts = {
+      wall: H_wall * bridge,
+      window: H_win * bridge,
+      roof: H_roof * bridge,
+      floor: H_floor * bridge,
+      vent: Hvent * bridge
     };
+    const H = (Htrans + Hvent) * bridge;
+
+    return { H, Htrans: Htrans * bridge, Hvent: Hvent * bridge, parts, bridge };
   }
 
-  function resolveGeometry(s) {
-    const proEnabled = String(s.proEnabled || "0") === "1";
-    if (!proEnabled) return geometryAUTO(s);
+  function annualHeatDemandKWh(H_WperK, HDD) {
+    return (H_WperK * HDD * 24) / 1000;
+  }
 
-    const g = geometryPRO(s);
-
-    const sync = String(s.proSyncArea || "1") === "1";
-    if (sync) {
-      const newArea = g.footprint * g.storeys;
-      g.area = newArea;
-      if ($("area")) $("area").value = Math.round(newArea);
+  function costFromHeatDemand(QkWh, heatingType, priceGas, priceEl, scop) {
+    if (heatingType === "hp") {
+      const cop = clamp(scop, 2.2, 5.5);
+      const elKwh = QkWh / cop;
+      return elKwh * priceEl;
+    } else {
+      const eff = HEAT[heatingType].eff;
+      const gasKwh = QkWh / eff;
+      return gasKwh * priceGas;
     }
-
-    return g;
   }
 
-  function calcHParts(s, mode /* now|target */) {
-    const g = resolveGeometry(s);
+  function heatDemandFromCost(costFt, heatingType, priceGas, priceEl, scop) {
+    if (costFt <= 0) return 0;
+    if (heatingType === "hp") {
+      const cop = clamp(scop, 2.2, 5.5);
+      const elKwh = costFt / Math.max(priceEl, 1e-6);
+      return elKwh * cop;
+    } else {
+      const eff = HEAT[heatingType].eff;
+      const gasKwh = costFt / Math.max(priceGas, 1e-6);
+      return gasKwh * eff;
+    }
+  }
 
-    const wallType = s.wallType || "brick";
-    const wallBase = baseUForWall(wallType);
-    const winU = 2.4;
-    const roofBase = 1.6;
-    const floorBase = 1.1;
+  function computeScenario(params) {
+    const {
+      area, storeys, height,
+      wallType, winRatio, nAir, bridgePct,
+      wallInsCm, wallInsMat,
+      roofInsCm, roofInsMat,
+      floorInsCm, floorInsMat
+    } = params;
 
-    const bridge = clamp(Number(s.bridge) || 0, 0, 25) / 100;
+    const g = geometry(area, storeys, height);
+    const Awin = g.wallGross * clamp(winRatio, 5, 35) / 100;
+    const AwallNet = Math.max(0, g.wallGross - Awin);
 
-    const wallInsCm = mode === "now" ? (Number(s.wallInsNow) || 0) : (Number(s.wallInsTarget) || 0);
-    const roofInsCm = mode === "now" ? (Number(s.roofInsNow) || 0) : (Number(s.roofInsTarget) || 0);
-    const floorInsCm = mode === "now" ? (Number(s.floorInsNow) || 0) : (Number(s.floorInsTarget) || 0);
+    const Uwall = uWithInsulation(U_BASE[wallType], wallInsCm, LAMBDA[wallInsMat]);
+    const Uroof = uWithInsulation(U_BASE.roof, roofInsCm, LAMBDA[roofInsMat]);
+    const Ufloor = uWithInsulation(U_BASE.floor, floorInsCm, LAMBDA[floorInsMat]);
+    const Uwin = U_BASE.window;
 
-    const wallMat = s.wallInsMat || "eps";
-    const roofMat = s.roofInsMat || "rockwool";
-    const floorMat = s.floorInsMat || "xps";
-
-    const Uwall = uAfterInsulation(wallBase, wallInsCm, wallMat);
-    const Uroof = uAfterInsulation(roofBase, roofInsCm, roofMat);
-    const Ufloor = uAfterInsulation(floorBase, floorInsCm, floorMat);
-
-    const Hwall = g.wallNet * Uwall * (1 + bridge);
-    const Hwin = g.winArea * winU;
-    const Hroof = g.roofArea * Uroof;
-    const Hfloor = g.floorArea * Ufloor;
-
-    const nAir = clamp(Number(s.nAir) || 0.6, 0.2, 1.2);
-    const Hvent = 0.33 * nAir * g.volume;
-
-    const Htot = Hwall + Hwin + Hroof + Hfloor + Hvent;
+    const loss = heatLossBreakdown(
+      Uwall, AwallNet,
+      Uwin, Awin,
+      Uroof, g.roofArea,
+      Ufloor, g.floorArea,
+      nAir, g.volume,
+      bridgePct
+    );
 
     return {
-      geo: g,
-      Uwall,
-      Uroof,
-      Ufloor,
-      Hwall,
-      Hwin,
-      Hroof,
-      Hfloor,
-      Hvent,
-      Htot,
+      geom: g,
+      areas: { AwallNet, Awin, Aroof: g.roofArea, Afloor: g.floorArea },
+      U: { Uwall, Uwin, Uroof, Ufloor },
+      H: loss
     };
   }
 
-  function computeFull(s) {
-    const now = calcHParts(s, "now");
-    const target = calcHParts(s, "target");
+  // ---------- UI / Defaults ----------
+  const btnRun = $("btnCalcRun");
+  const btnReset = $("btnReset");
+  const resultBox = $("resultBox");
 
-    const annualCostNow = Math.max(0, Number(s.annualCostNow) || 0);
-    const hdd = clamp(Number(s.hdd) || 3000, 1800, 4500);
+  const DEFAULTS = {
+    area: 100,
+    storeys: 1,
+    height: 2.6,
+    wallType: "brick",
+    winRatio: 18,
+    nAir: 0.6,
+    wallInsNow: 0,
+    wallInsMat: "eps",
+    roofInsNow: 0,
+    roofInsMat: "rockwool",
+    floorInsNow: 0,
+    floorInsMat: "xps",
+    heatingNow: "gas_old",
+    scopNow: 3.2,
+    annualCostNow: 600000,
 
-    const heatingNow = s.heatingNow || "gas_old";
-    const heatingTarget = s.heatingTarget || "hp";
-    const priceGas = Math.max(1, Number(s.priceGas) || 40);
-    const priceEl = Math.max(1, Number(s.priceEl) || 70);
+    wallInsTarget: 15,
+    roofInsTarget: 25,
+    floorInsTarget: 10,
+    heatingTarget: "hp",
+    scopTarget: 3.6,
+    hdd: 3000,
+    priceGas: 40,
+    priceEl: 70,
 
-    function costToKwh(cost, heating, scop) {
-      if (heating === "hp") {
-        const sc = clamp(Number(scop) || 3.2, 2.2, 5.5);
-        return (cost * sc) / priceEl;
+    bridge: 10,
+    costWallM2: 18000,
+    costRoofM2: 12000,
+    costFloorM2: 15000,
+    costHeating: 3500000
+  };
+
+  function setDefaults() {
+    const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
+
+    setVal("area", DEFAULTS.area);
+    setVal("storeys", String(DEFAULTS.storeys));
+    setVal("height", DEFAULTS.height);
+    setVal("wallType", DEFAULTS.wallType);
+    setVal("winRatio", DEFAULTS.winRatio);
+    setVal("nAir", DEFAULTS.nAir);
+
+    setVal("wallInsNow", DEFAULTS.wallInsNow);
+    setVal("wallInsMat", DEFAULTS.wallInsMat);
+    setVal("roofInsNow", DEFAULTS.roofInsNow);
+    setVal("roofInsMat", DEFAULTS.roofInsMat);
+    setVal("floorInsNow", DEFAULTS.floorInsNow);
+    setVal("floorInsMat", DEFAULTS.floorInsMat);
+
+    setVal("heatingNow", DEFAULTS.heatingNow);
+    setVal("scopNow", DEFAULTS.scopNow);
+    setVal("annualCostNow", DEFAULTS.annualCostNow);
+
+    setVal("wallInsTarget", DEFAULTS.wallInsTarget);
+    setVal("roofInsTarget", DEFAULTS.roofInsTarget);
+    setVal("floorInsTarget", DEFAULTS.floorInsTarget);
+    setVal("heatingTarget", DEFAULTS.heatingTarget);
+    setVal("scopTarget", DEFAULTS.scopTarget);
+
+    setVal("hdd", DEFAULTS.hdd);
+    setVal("priceGas", DEFAULTS.priceGas);
+    setVal("priceEl", DEFAULTS.priceEl);
+
+    setVal("bridge", DEFAULTS.bridge);
+    setVal("costWallM2", DEFAULTS.costWallM2);
+    setVal("costRoofM2", DEFAULTS.costRoofM2);
+    setVal("costFloorM2", DEFAULTS.costFloorM2);
+    setVal("costHeating", DEFAULTS.costHeating);
+  }
+
+  // ---------- Kalkulátor állapot (input lista) ----------
+  const INPUT_IDS = [
+    "area","storeys","height","wallType","winRatio","nAir",
+    "wallInsNow","wallInsMat","roofInsNow","roofInsMat","floorInsNow","floorInsMat",
+    "heatingNow","scopNow","annualCostNow",
+    "wallInsTarget","roofInsTarget","floorInsTarget","heatingTarget","scopTarget",
+    "hdd","priceGas","priceEl",
+    "bridge","costWallM2","costRoofM2","costFloorM2","costHeating"
+  ];
+
+  function serializeState(){
+    const s = {};
+    INPUT_IDS.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      s[id] = el.value;
+    });
+    return s;
+  }
+
+  function applyState(s){
+    if (!s) return;
+    INPUT_IDS.forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      if (s[id] !== undefined) el.value = s[id];
+    });
+  }
+
+  // =========================
+  // LINKELHETŐ KALKULÁCIÓ (share URL)
+  // =========================
+  function parseHash(){
+    const raw = (location.hash || "#home").replace(/^#/, "");
+    const parts = raw.split("&").filter(Boolean);
+    const view = (parts[0] || "home").split("?")[0];
+    const params = {};
+    parts.slice(1).forEach(p => {
+      const [k, ...rest] = p.split("=");
+      params[decodeURIComponent(k)] = decodeURIComponent(rest.join("=") || "");
+    });
+    return { view, params };
+  }
+
+  function b64urlEncode(str){
+    const utf8 = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+      String.fromCharCode(parseInt(p1, 16))
+    );
+    const b64 = btoa(utf8);
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function b64urlDecode(b64url){
+    const b64 = (b64url || "").replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64 + "===".slice((b64.length + 3) % 4);
+    const bin = atob(pad);
+    const pct = Array.prototype.map.call(bin, c =>
+      "%" + c.charCodeAt(0).toString(16).padStart(2, "0")
+    ).join("");
+    return decodeURIComponent(pct);
+  }
+
+  function buildShareHash(){
+    const payload = JSON.stringify(serializeState());
+    const token = b64urlEncode(payload);
+    return `#calc&share=${encodeURIComponent(token)}`;
+  }
+
+  function tryApplyShareFromUrl(){
+    const { view, params } = parseHash();
+    if (view !== "calc") return false;
+    if (!params.share) return false;
+
+    try{
+      const json = b64urlDecode(params.share);
+      const state = JSON.parse(json);
+      applyState(state);
+      toast("Megosztott kalkuláció betöltve.");
+      return true;
+    }catch(e){
+      console.error(e);
+      toast("Hibás megosztás link.");
+      return false;
+    }
+  }
+
+  async function copyToClipboard(text){
+    try{
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        await navigator.clipboard.writeText(text);
+        return true;
       }
-      return cost / priceGas;
-    }
+    }catch(_){}
+    try{
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    }catch(_){}
+    return false;
+  }
 
-    function kwhToCost(kwh, heating, scop) {
-      if (heating === "hp") {
-        const sc = clamp(Number(scop) || 3.6, 2.2, 5.5);
-        return (kwh / sc) * priceEl;
-      }
-      return kwh * priceGas;
-    }
+  async function shareLink(){
+    const url = location.origin + location.pathname + buildShareHash();
+    const ok = await copyToClipboard(url);
+    if (ok) toast("Link kimásolva ✅");
+    else prompt("Másold ki ezt a linket:", url);
+  }
 
-    const QrealNow = costToKwh(annualCostNow, heatingNow, s.scopNow);
-    const denom = Math.max(0.0001, now.Htot * hdd);
-    const calib = QrealNow / denom;
+  function bindShareButton(){
+    const root = viewCalc || document;
+    const buttons = Array.from(root.querySelectorAll("button"));
 
-    const QmodelNow = now.Htot * hdd * calib;
-    const QmodelTarget = target.Htot * hdd * calib;
-
-    const costNow = kwhToCost(QmodelNow, heatingNow, s.scopNow);
-    const costTarget = kwhToCost(QmodelTarget, heatingTarget, s.scopTarget);
-
-    const saving = Math.max(0, costNow - costTarget);
-    const savingMo = saving / 12;
-    const improve = costNow > 0 ? (saving / costNow) * 100 : 0;
-
-    // investment (irány)
-    const g = now.geo;
-    const wallM2_10 = Math.max(0, Number(s.costWallM2) || 0);
-    const roofM2_10 = Math.max(0, Number(s.costRoofM2) || 0);
-    const floorM2_10 = Math.max(0, Number(s.costFloorM2) || 0);
-    const heatCost = Math.max(0, Number(s.costHeating) || 0);
-
-    const dWall = Math.max(0, (Number(s.wallInsTarget) || 0) - (Number(s.wallInsNow) || 0));
-    const dRoof = Math.max(0, (Number(s.roofInsTarget) || 0) - (Number(s.roofInsNow) || 0));
-    const dFloor = Math.max(0, (Number(s.floorInsTarget) || 0) - (Number(s.floorInsNow) || 0));
-
-    const wallAreaCostBase = g.wallGross;
-
-    const investWall = wallAreaCostBase * wallM2_10 * (dWall / 10);
-    const investRoof = g.roofArea * roofM2_10 * (dRoof / 10);
-    const investFloor = g.floorArea * floorM2_10 * (dFloor / 10);
-
-    const changeHeat = heatingNow !== heatingTarget;
-    const investHeat = changeHeat ? heatCost : 0;
-
-    const investTotal = investWall + investRoof + investFloor + investHeat;
-    const payback = saving > 0 ? investTotal / saving : Infinity;
-
-    // prio
-    const dH = {
-      roof: Math.max(0, now.Hroof - target.Hroof),
-      wall: Math.max(0, now.Hwall - target.Hwall),
-      floor: Math.max(0, now.Hfloor - target.Hfloor),
-      win: Math.max(0, now.Hwin - target.Hwin),
-      vent: Math.max(0, now.Hvent - target.Hvent),
+    const pick = (needle) => {
+      const n = (needle||"").toLowerCase();
+      return buttons.find(b => ((b.textContent||"").trim().toLowerCase() === n))
+          || buttons.find(b => ((b.textContent||"").toLowerCase().includes(n)));
     };
 
-    const sumDH = dH.wall + dH.roof + dH.floor + dH.win + dH.vent + (changeHeat ? now.Htot * 0.15 : 0);
-    const dhToFt = (dh) => (sumDH <= 0 ? 0 : saving * (dh / sumDH));
+    const btnShare = $("btnShare") || pick("megosztás") || pick("link");
+    if (btnShare){
+      btnShare.addEventListener("click", async () => { flashBtn(btnShare); await shareLink(); });
+    }
+  }
 
-    const prio = [
-      { key: "futes", name: "Fűtés", ft: changeHeat ? Math.max(dhToFt(now.Htot * 0.15), saving * 0.35) : 0, invest: investHeat },
-      { key: "roof", name: "Födém/padlás", ft: dhToFt(dH.roof), invest: investRoof },
-      { key: "wall", name: "Fal", ft: dhToFt(dH.wall), invest: investWall },
-      { key: "floor", name: "Padló/aljzat", ft: dhToFt(dH.floor), invest: investFloor },
-    ].filter((x) => x.ft > 0.01 || x.invest > 0.01);
+  // =========================
+  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage) – gyors, böngészőben
+  // =========================
+  const STATE_KEY = "ea3d_state_v1";
 
-    prio.sort((a, b) => b.ft - a.ft);
+  function bindStateButtons(){
+    const btnSave = $("btnSaveState");
+    const btnLoad = $("btnLoadState");
+    const btnClear = $("btnClearState");
+
+    if (btnSave){
+      btnSave.addEventListener("click", () => {
+        flashBtn(btnSave);
+        try{
+          const state = serializeState();
+          localStorage.setItem(STATE_KEY, JSON.stringify(state));
+          toast("Mentve (böngészőbe) ✅");
+        }catch(e){
+          console.error(e);
+          toast("Mentés hiba.");
+        }
+      });
+    }
+
+    if (btnLoad){
+      btnLoad.addEventListener("click", () => {
+        flashBtn(btnLoad);
+        try{
+          const raw = localStorage.getItem(STATE_KEY);
+          if (!raw){
+            toast("Nincs mentés a böngészőben.");
+            return;
+          }
+          const state = JSON.parse(raw);
+          applyState(state);
+          toast("Betöltve ✅");
+          calcAll(); // frissítünk mindent + feloldjuk a tervet
+          if ((location.hash || "").includes("3d")) updateHeatmap();
+        }catch(e){
+          console.error(e);
+          toast("Betöltés hiba.");
+        }
+      });
+    }
+
+    if (btnClear){
+      btnClear.addEventListener("click", () => {
+        flashBtn(btnClear);
+        try{
+          localStorage.removeItem(STATE_KEY);
+          toast("Böngészős mentés törölve 🧹");
+        }catch(e){
+          console.error(e);
+          toast("Törlés hiba.");
+        }
+      });
+    }
+  }
+
+  // =========================
+  // EXPORT / IMPORT (JSON fájl)
+  // =========================
+  const EXPORT_VERSION = 1;
+
+  function buildExportPayload(){
+    return {
+      app: "Energia Advisor 3D",
+      version: EXPORT_VERSION,
+      createdAt: new Date().toISOString(),
+      state: serializeState(),
+      // mentjük az utolsó elemzést is, hogy a terv azonnal meglegyen
+      lastAnalysis: EA_LAST || null
+    };
+  }
+
+  function safeFileName(){
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2,"0");
+    return `energia-advisor-kalkulacio_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+  }
+
+  function downloadJson(obj, filename){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "energia-advisor-kalkulacio.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function bindExportImportButtons(){
+    const btnExport = $("btnExportState");
+    const btnImport = $("btnImportState");
+    const fileInput = $("eaImportFile");
+
+    if (btnExport){
+      btnExport.addEventListener("click", () => {
+        flashBtn(btnExport);
+        try{
+          const payload = buildExportPayload();
+          downloadJson(payload, safeFileName());
+          toast("Export kész ✅ (letöltés)");
+        }catch(e){
+          console.error(e);
+          toast("Export hiba.");
+        }
+      });
+    }
+
+    if (btnImport && fileInput){
+      btnImport.addEventListener("click", () => {
+        flashBtn(btnImport);
+        fileInput.value = ""; // ugyanazt a fájlt is engedje újra
+        fileInput.click();
+      });
+
+      fileInput.addEventListener("change", async () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) return;
+
+        try{
+          const text = await f.text();
+          const payload = JSON.parse(text);
+
+          // Minimális ellenőrzés
+          if (!payload || typeof payload !== "object" || !payload.state){
+            toast("Hibás JSON fájl.");
+            return;
+          }
+
+          applyState(payload.state);
+
+          // ha mentve volt elemzés, visszatöltjük – különben újraszámoljuk
+          if (payload.lastAnalysis && typeof payload.lastAnalysis === "object"){
+            EA_LAST = payload.lastAnalysis;
+            setPlanUnlocked(true);
+            toast("Import kész ✅ (állapot + terv)");
+            // eredmény kirajzolása: biztonság kedvéért újraszámolunk is
+            calcAll();
+          } else {
+            toast("Import kész ✅ (állapot)");
+            calcAll(); // számoljuk újra -> terv is lesz
+          }
+
+          // ha épp 3D-ben vagyunk frissüljön
+          if ((location.hash || "").includes("3d")) updateHeatmap();
+        }catch(e){
+          console.error(e);
+          toast("Import hiba (nem jó JSON?).");
+        }
+      });
+    }
+  }
+
+  // =========================
+  // PDF (egyszerű: nyomtatás PDF-be)
+  // =========================
+  function bindPdfButtons(){
+    const btnPdfCalc = $("btnExportPDF");
+    const btnPdf3d = $("btnExportPDF_3D");
+
+    const doPrint = (btn) => {
+      flashBtn(btn);
+      toast("PDF / Nyomtatás…");
+      setTimeout(() => window.print(), 150);
+    };
+
+    if (btnPdfCalc) btnPdfCalc.addEventListener("click", () => doPrint(btnPdfCalc));
+    if (btnPdf3d) btnPdf3d.addEventListener("click", () => doPrint(btnPdf3d));
+  }
+
+  // ---------- Core calc ----------
+  function readInputs() {
+    const val = (id, fallback) => $(id) ? $(id).value : fallback;
+
+    const area = clamp(num(val("area", 100), 100), 20, 1000);
+    const storeys = clamp(num(val("storeys", 1), 1), 1, 3);
+    const height = clamp(num(val("height", 2.6), 2.6), 2.2, 3.2);
+    const wallType = val("wallType", "brick");
+
+    const winRatio = clamp(num(val("winRatio", 18), 18), 5, 35);
+    const nAir = clamp(num(val("nAir", 0.6), 0.6), 0.2, 1.2);
+
+    const wallInsNow = clamp(num(val("wallInsNow", 0), 0), 0, 50);
+    const wallInsMat = val("wallInsMat", "eps");
+    const roofInsNow = clamp(num(val("roofInsNow", 0), 0), 0, 120);
+    const roofInsMat = val("roofInsMat", "rockwool");
+    const floorInsNow = clamp(num(val("floorInsNow", 0), 0), 0, 30);
+    const floorInsMat = val("floorInsMat", "xps");
+
+    const heatingNow = val("heatingNow", "gas_old");
+    const scopNow = clamp(num(val("scopNow", 3.2), 3.2), 2.2, 5.5);
+    const annualCostNow = Math.max(0, num(val("annualCostNow", 0), 0));
+
+    const wallInsTarget = clamp(num(val("wallInsTarget", 15), 15), 0, 50);
+    const roofInsTarget = clamp(num(val("roofInsTarget", 25), 25), 0, 120);
+    const floorInsTarget = clamp(num(val("floorInsTarget", 10), 10), 0, 30);
+
+    const heatingTarget = val("heatingTarget", "hp");
+    const scopTarget = clamp(num(val("scopTarget", 3.6), 3.6), 2.2, 5.5);
+
+    const hdd = clamp(num(val("hdd", 3000), 3000), 1800, 4500);
+    const priceGas = clamp(num(val("priceGas", 40), 40), 10, 120);
+    const priceEl = clamp(num(val("priceEl", 70), 70), 20, 180);
+
+    const bridge = clamp(num(val("bridge", 10), 10), 0, 25);
+
+    const costWallM2 = Math.max(0, num(val("costWallM2", 18000), 18000));
+    const costRoofM2 = Math.max(0, num(val("costRoofM2", 12000), 12000));
+    const costFloorM2 = Math.max(0, num(val("costFloorM2", 15000), 15000));
+    const costHeating = Math.max(0, num(val("costHeating", 3500000), 3500000));
 
     return {
-      ts: Date.now(),
-      inputs: s,
-      geo: g,
-      now,
-      target,
-      costNow,
-      costTarget,
-      saving,
-      savingMo,
-      improve,
-      QmodelNow,
-      QmodelTarget,
-      calib,
-      investWall,
-      investRoof,
-      investFloor,
-      investHeat,
-      investTotal,
-      payback,
-      prio,
+      area, storeys, height, wallType,
+      winRatio, nAir,
+      wallInsNow, wallInsMat,
+      roofInsNow, roofInsMat,
+      floorInsNow, floorInsMat,
+      heatingNow, scopNow,
+      annualCostNow,
+      wallInsTarget, roofInsTarget, floorInsTarget,
+      heatingTarget, scopTarget,
+      hdd, priceGas, priceEl,
+      bridge,
+      costWallM2, costRoofM2, costFloorM2, costHeating
     };
   }
 
-  // ---------------- render result ----------------
-  function renderResult(r) {
-    if (!resultBox || !r) return;
+  function investmentCosts(sNow, sTarget, areas, costs) {
+    const deltaWall = Math.max(0, sTarget.wall - sNow.wall);
+    const deltaRoof = Math.max(0, sTarget.roof - sNow.roof);
+    const deltaFloor = Math.max(0, sTarget.floor - sNow.floor);
 
-    const g = r.geo;
+    const wallCost = areas.AwallNet * costs.costWallM2 * (deltaWall / 10);
+    const roofCost = areas.Aroof * costs.costRoofM2 * (deltaRoof / 10);
+    const floorCost = areas.Afloor * costs.costFloorM2 * (deltaFloor / 10);
+    const heatCost = costs.costHeating;
 
-    const surfaces = `
-      <div class="miniCard" style="margin-top:10px;">
-        <div class="miniTitle">Felületek (modell alapja)</div>
-        <div class="muted tiny">
-          Mód: <b>${g.mode}</b><br/>
-          Fal bruttó: <b>${fmt1(g.wallGross)} m²</b> • Ablak: <b>${fmt1(g.winArea)} m²</b> • Fal nettó: <b>${fmt1(g.wallNet)} m²</b><br/>
-          Födém/padlás: <b>${fmt1(g.roofArea)} m²</b> • Padló/aljzat: <b>${fmt1(g.floorArea)} m²</b> • Térfogat: <b>${fmt1(g.volume)} m³</b>
-          <br/><span class="muted">(Ezekből számolja a beruházás költséget is: m² × Ft/m² × vastagság arány)</span>
-        </div>
-      </div>
-    `;
-
-    const prioHtml = (r.prio || [])
-      .map((p, i) => `<div class="muted">${i + 1}. <b>${p.name}</b>: ~ ${fmt(Math.round(p.ft))} Ft / év</div>`)
-      .join("");
-
-    const investLines = [
-      { name: "Födém", v: r.investRoof },
-      { name: "Fal", v: r.investWall },
-      { name: "Padló", v: r.investFloor },
-      { name: "Fűtés", v: r.investHeat },
-    ]
-      .filter((x) => x.v > 0)
-      .map((x) => `<div class="muted">• ${x.name}: <b>${fmt(Math.round(x.v))} Ft</b></div>`)
-      .join("");
-
-    const paybackTxt = isFinite(r.payback) ? `${fmt1(r.payback)} év` : "–";
-
-    resultBox.innerHTML = `
-      <div class="sectionTitle">Eredmény</div>
-
-      ${surfaces}
-
-      <div class="miniCard" style="margin-top:12px;">
-        <div class="miniTitle">Költség (becslés)</div>
-        <div class="muted">MOST (Ft/év): <b>${fmt(Math.round(r.costNow))} Ft</b> ~ ${fmt(Math.round(r.costNow / 12))} Ft/hó</div>
-        <div class="muted">CÉL (Ft/év): <b>${fmt(Math.round(r.costTarget))} Ft</b> ~ ${fmt(Math.round(r.costTarget / 12))} Ft/hó</div>
-        <div class="muted" style="margin-top:6px;">Különbség: <b>${fmt(Math.round(r.saving))} Ft</b> ~ ${fmt(Math.round(r.savingMo))} Ft/hó</div>
-        <div class="muted">Javulás (költség): <b>${fmt1(r.improve)}%</b></div>
-      </div>
-
-      <div class="miniCard" style="margin-top:12px;">
-        <div class="miniTitle">Prioritás (Ft/év alapján)</div>
-        ${prioHtml || `<div class="muted">–</div>`}
-        <div class="tiny muted" style="margin-top:6px;">Tipp: a Felújítási terv fül az Elemzés után aktiválódik.</div>
-      </div>
-
-      <div class="miniCard" style="margin-top:12px;">
-        <div class="miniTitle">Beruházás + megtérülés (irány)</div>
-        ${investLines || `<div class="muted">–</div>`}
-        <div class="muted" style="margin-top:6px;">Összesen: <b>${fmt(Math.round(r.investTotal))} Ft</b> • megtérülés: <b>${paybackTxt}</b></div>
-      </div>
-
-      <details class="details" style="margin-top:12px;">
-        <summary>▶ Technikai számok (ellenőrzéshez)</summary>
-        <div class="muted tiny" style="margin-top:8px;">
-          H (MOST): ${fmt1(r.now.Htot)} W/K • Q_model: ${fmt(Math.round(r.QmodelNow))} kWh/év<br/>
-          H (CÉL): ${fmt1(r.target.Htot)} W/K • Q_model: ${fmt(Math.round(r.QmodelTarget))} kWh/év<br/>
-          Kalibrációs szorzó: ${fmt1(r.calib)}
-        </div>
-      </details>
-    `;
-
-    saveLast(r);
-    updatePlanLock();
+    return { wallCost, roofCost, floorCost, heatCost };
   }
 
-  // ---------------- plan ----------------
-  function updatePlanLock() {
-    const has = !!safeReadLast();
-    if (btnPlan) {
-      btnPlan.setAttribute("aria-disabled", has ? "false" : "true");
-      btnPlan.title = has ? "" : "Előbb futtasd az Elemzést.";
-      btnPlan.style.opacity = has ? "" : "0.75";
+  function renderResult(out) {
+    if (!resultBox) return;
+    resultBox.innerHTML = out;
+  }
+
+  // ====== Felújítási terv állapot ======
+  let EA_LAST = null;            // utolsó elemzés összefoglalója
+  let EA_PLAN_UNLOCKED = false;  // terv gomb aktív-e
+
+  function setPlanUnlocked(on){
+    EA_PLAN_UNLOCKED = !!on;
+    if (!btnPlan) return;
+
+    if (EA_PLAN_UNLOCKED){
+      btnPlan.setAttribute("aria-disabled", "false");
+      btnPlan.removeAttribute("title");
+      btnPlan.classList.remove("isDisabled");
+    } else {
+      btnPlan.setAttribute("aria-disabled", "true");
+      btnPlan.setAttribute("title", "Előbb futtasd az Elemzést.");
+      btnPlan.classList.add("isDisabled");
     }
-    if (planLockedNote) planLockedNote.style.display = has ? "none" : "";
   }
 
-  function renderPlanFromLast() {
-    if (!planBox) return;
-    const r = safeReadLast();
-    if (!r) {
+  function planStepHint(key){
+    if (key === "Fűtés") return "Szigetelés után gyakran még jobb a hatása.";
+    if (key === "Födém/padlás") return "Jellemzően gyors és jó első lépés.";
+    if (key === "Fal") return "Csomópontok (koszorú/lábazat) minősége sokat számít.";
+    if (key === "Padló/aljzat") return "Bontás/hozzáférés függő, ezért változó megtérülés.";
+    return "";
+  }
+
+  function renderPlan(){
+    const planBox = $("planBox");
+    const locked = $("planLockedNote");
+    if (!planBox || !locked) return;
+
+    if (!EA_PLAN_UNLOCKED || !EA_LAST){
+      locked.style.display = "";
       planBox.innerHTML = "";
       return;
     }
 
-    const totalInvest = Math.round(r.investTotal || 0);
-    const totalSave = Math.round(r.saving || 0);
-    const totalPay = isFinite(r.payback) ? round(r.payback, 1) : null;
+    locked.style.display = "none";
 
-    const pr = (r.prio || []).slice(0, 5);
+    const L = EA_LAST;
 
-    const cards = pr
-      .map((p, idx) => {
-        const pb = p.ft > 0 ? (p.invest || 0) / p.ft : Infinity;
-        const pbTxt = isFinite(pb) ? `${round(pb, 1)} év` : "–";
-        return `
-          <div class="miniCard" style="margin-top:12px;">
-            <div class="miniTitle">${idx + 1}. ${p.name}</div>
-            <div class="muted"><b>Várható megtakarítás:</b> ~ ${fmt(Math.round(p.ft))} Ft / év (~ ${fmt(Math.round(p.ft / 12))} Ft/hó)</div>
-            <div class="muted"><b>Becsült beruházás:</b> ${fmt(Math.round(p.invest || 0))} Ft</div>
-            <div class="muted"><b>Megtérülés (irány):</b> ${pbTxt}</div>
+    const totalInv =
+      (L.inv?.roofCost || 0) +
+      (L.inv?.wallCost || 0) +
+      (L.inv?.floorCost || 0) +
+      ((L.heatingChanged ? (L.inv?.heatCost || 0) : 0));
+
+    const totalSave = L.savingYear || 0;
+    const totalPb = paybackYears(totalInv, totalSave);
+
+    const steps = (L.prio || []).slice(0, 5);
+
+    const lines = steps.map((s, i) => {
+      const invest = (L.invMap && L.invMap[s.k]) ? L.invMap[s.k] : 0;
+      const pb = paybackYears(invest, s.v || 0);
+      return `
+        <div class="out" style="margin-top:12px;">
+          <div class="sectionTitle">${i+1}. ${s.k}</div>
+          <div style="margin-top:8px;">
+            <b>Várható megtakarítás:</b> ~ ${fmtFt(s.v)} / év <span class="muted">(~ ${fmtFtShort((s.v||0)/12)} Ft/hó)</span><br/>
+            <b>Becsült beruházás:</b> ${fmtFt(invest)}<br/>
+            <b>Megtérülés (irány):</b> ${fmtYears(pb)}<br/>
+            <div class="muted" style="margin-top:6px;">${planStepHint(s.k)}</div>
           </div>
-        `;
-      })
-      .join("");
+        </div>
+      `;
+    }).join("");
 
     planBox.innerHTML = `
-      <div class="miniCard" style="margin-top:10px;">
-        <div class="miniTitle">Összesítés (MOST → CÉL)</div>
-        <div class="muted">Teljes beruházás: <b>${fmt(totalInvest)} Ft</b></div>
-        <div class="muted">Teljes éves megtakarítás: <b>${fmt(totalSave)} Ft / év</b> (~ ${fmt(Math.round(totalSave / 12))} Ft/hó)</div>
-        <div class="muted">Teljes megtérülés: <b>${totalPay != null ? fmt1(totalPay) + " év" : "–"}</b></div>
+      <div class="out">
+        <div class="sectionTitle">Összesítés (MOST → CÉL)</div>
+        <div style="margin-top:8px;">
+          <b>Teljes beruházás:</b> ${fmtFt(totalInv)}<br/>
+          <b>Teljes éves megtakarítás:</b> ${fmtFt(totalSave)} / év <span class="muted">(~ ${fmtFtShort(totalSave/12)} Ft/hó)</span><br/>
+          <b>Teljes megtérülés:</b> ${fmtYears(totalPb)}
+        </div>
       </div>
 
-      <div class="miniCard" style="margin-top:12px;">
-        <div class="miniTitle">3–5 lépéses felújítási terv</div>
-        <div class="muted">A sorrend a várható <b>Ft/év</b> megtakarítás alapján van. (A valós sorrendet befolyásolhatja a kivitelezés, állapot, hozzáférhetőség.)</div>
+      <div class="out" style="margin-top:12px;">
+        <div class="sectionTitle">3–5 lépéses felújítási terv</div>
+        <div class="muted" style="margin-top:6px;">
+          A sorrend a várható <b>Ft/év megtakarítás</b> alapján van. (A valós sorrendet befolyásolhatja a kivitelezés, állapot, hozzáférhetőség.)
+        </div>
       </div>
 
-      ${cards}
+      ${lines}
 
-      <div class="miniCard" style="margin-top:12px;">
-        <div class="miniTitle">Ajánlatkérés a terv alapján</div>
-        <div class="muted">Kérj ajánlatot a számolt terv alapján — a szakik gyorsabban tudnak árazni, ha látják a célokat.</div>
+      <div class="out" style="margin-top:12px;">
+        <div class="sectionTitle">Ajánlatkérés a terv alapján</div>
+        <div class="muted" style="margin-top:6px;">Kérj ajánlatot a számolt terv alapján – a szakik gyorsabban tudnak árazni, ha látják a célokat.</div>
         <div style="margin-top:10px;">
-          <button id="planLeadBtn" class="btn primary">Ajánlatkérés szakiktól</button>
+          <button id="btnLeadPlan" class="btn primary">Ajánlatkérés szakiktól</button>
         </div>
       </div>
     `;
 
-    const planLeadBtn = $("planLeadBtn");
-    if (planLeadBtn) planLeadBtn.addEventListener("click", () => (window.location.href = SZAKIPIAC_HOME_URL));
+    // terv alatti gomb
+    const btnLeadPlan = $("btnLeadPlan");
+    if (btnLeadPlan){
+      btnLeadPlan.addEventListener("click", () => {
+        flashBtn(btnLeadPlan);
+        toast("Vissza a SzakiPiacra…");
+        goToSzakipiacHome();
+      });
+    }
   }
 
-  // ---------------- heatmap (3D) ----------------
-  function setHmMode(mode) {
-    hmMode = mode;
-    localStorage.setItem(LS_HM_MODE, mode);
+  function calcAll() {
+    const x = readInputs();
 
-    [hmModeNow, hmModeTarget, hmModeDelta].forEach((b) => b && b.classList.remove("active"));
-    if (mode === "now" && hmModeNow) hmModeNow.classList.add("active");
-    if (mode === "target" && hmModeTarget) hmModeTarget.classList.add("active");
-    if (mode === "delta" && hmModeDelta) hmModeDelta.classList.add("active");
+    const nowScenario = computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
+    });
 
-    renderHeatmapFromLast();
-  }
+    const targetScenario = computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+    });
 
-  function pickClass(norm) {
-    if (norm >= 0.66) return "hmHot";
-    if (norm >= 0.33) return "hmMid";
-    return "hmCool";
-  }
+    const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
 
-  function applyHmClass(el, norm) {
-    if (!el) return;
-    el.classList.remove("hmHot", "hmMid", "hmCool");
-    el.classList.add(pickClass(norm));
-  }
+    const Q_real_now = heatDemandFromCost(
+      x.annualCostNow,
+      x.heatingNow,
+      x.priceGas,
+      x.priceEl,
+      x.scopNow
+    );
 
-  function renderHeatmapFromLast() {
-    if (!view3d) return;
+    const calib = (Q_model_now > 0) ? (Q_real_now / Q_model_now) : 1;
 
-    const r = safeReadLast();
-    if (!r) {
-      if (hmList) hmList.innerHTML = "";
-      if (hmExplain) hmExplain.textContent = "–";
-      [hmRoof, hmWallL, hmWallR, hmWin, hmFloor, hmVent].forEach((el) => applyHmClass(el, 0));
-      return;
+    const Q_model_target = annualHeatDemandKWh(targetScenario.H.H, x.hdd);
+    const Q_real_target = Q_model_target * calib;
+
+    const costNow = x.annualCostNow;
+    const costTarget = costFromHeatDemand(Q_real_target, x.heatingTarget, x.priceGas, x.priceEl, x.scopTarget);
+
+    const savingYear = Math.max(0, costNow - costTarget);
+    const savingMonth = savingYear / 12;
+    const improve = (Q_real_now > 0) ? (1 - (Q_real_target / Q_real_now)) : 0;
+
+    function costOnly(change) {
+      const wall = change.wall ?? x.wallInsNow;
+      const roof = change.roof ?? x.roofInsNow;
+      const floor = change.floor ?? x.floorInsNow;
+
+      const sc = computeScenario({
+        area: x.area, storeys: x.storeys, height: x.height,
+        wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+        wallInsCm: wall, wallInsMat: x.wallInsMat,
+        roofInsCm: roof, roofInsMat: x.roofInsMat,
+        floorInsCm: floor, floorInsMat: x.floorInsMat
+      });
+
+      const Q_model = annualHeatDemandKWh(sc.H.H, x.hdd);
+      const Q_real = Q_model * calib;
+
+      const heating = change.heating ?? x.heatingNow;
+      const scop = change.scop ?? x.scopNow;
+
+      return costFromHeatDemand(Q_real, heating, x.priceGas, x.priceEl, scop);
     }
 
-    const now = r.now;
-    const target = r.target;
+    const costOnlyRoof = costOnly({ roof: x.roofInsTarget });
+    const costOnlyWall = costOnly({ wall: x.wallInsTarget });
+    const costOnlyFloor = costOnly({ floor: x.floorInsTarget });
+    const costOnlyHeat = costOnly({ heating: x.heatingTarget, scop: x.scopTarget });
 
-    let parts;
+    const saveOnlyRoof = Math.max(0, costNow - costOnlyRoof);
+    const saveOnlyWall = Math.max(0, costNow - costOnlyWall);
+    const saveOnlyFloor = Math.max(0, costNow - costOnlyFloor);
+    const saveOnlyHeat = Math.max(0, costNow - costOnlyHeat);
 
-    if (hmMode === "now") {
-      parts = { Roof: now.Hroof, Wall: now.Hwall, Win: now.Hwin, Floor: now.Hfloor, Vent: now.Hvent };
-    } else if (hmMode === "target") {
-      parts = { Roof: target.Hroof, Wall: target.Hwall, Win: target.Hwin, Floor: target.Hfloor, Vent: target.Hvent };
+    const prio = [
+      { k: "Fűtés", v: saveOnlyHeat },
+      { k: "Födém/padlás", v: saveOnlyRoof },
+      { k: "Fal", v: saveOnlyWall },
+      { k: "Padló/aljzat", v: saveOnlyFloor }
+    ].sort((a, b) => b.v - a.v);
+
+    const inv = investmentCosts(
+      { wall: x.wallInsNow, roof: x.roofInsNow, floor: x.floorInsNow },
+      { wall: x.wallInsTarget, roof: x.roofInsTarget, floor: x.floorInsTarget },
+      targetScenario.areas,
+      { costWallM2: x.costWallM2, costRoofM2: x.costRoofM2, costFloorM2: x.costFloorM2, costHeating: x.costHeating }
+    );
+
+    const pbRoof = paybackYears(inv.roofCost, saveOnlyRoof);
+    const pbWall = paybackYears(inv.wallCost, saveOnlyWall);
+    const pbFloor = paybackYears(inv.floorCost, saveOnlyFloor);
+    const heatingChanged = (x.heatingTarget !== x.heatingNow);
+    const pbHeat = heatingChanged ? paybackYears(inv.heatCost, saveOnlyHeat) : Infinity;
+
+    const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
+    const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
+
+    // mentjük a tervhez szükséges minimumot
+    EA_LAST = {
+      savingYear,
+      prio,
+      inv,
+      heatingChanged,
+      // map a terv lépésekhez
+      invMap: {
+        "Födém/padlás": inv.roofCost,
+        "Fal": inv.wallCost,
+        "Padló/aljzat": inv.floorCost,
+        "Fűtés": inv.heatCost
+      }
+    };
+    setPlanUnlocked(true);
+
+    const html = `
+      <div class="sectionTitle">Eredmény</div>
+
+      <div class="out" style="margin-top:10px;">
+        <div class="sectionTitle">MOST → CÉL</div>
+        <ul>
+          <li><b>Fal:</b> ${x.wallInsNow} cm → ${x.wallInsTarget} cm (${x.wallInsMat.toUpperCase()})</li>
+          <li><b>Födém/padlás:</b> ${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})</li>
+          <li><b>Padló/aljzat:</b> ${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})</li>
+          <li><b>Fűtés:</b> ${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}</li>
+          <li class="muted">HDD: ${x.hdd} • légcsere: ${x.nAir} 1/h • ablakarány: ${x.winRatio}% • hőhíd: ${x.bridge}%</li>
+        </ul>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">Költség (becslés)</div>
+        <div style="margin-top:6px;">
+          <b>MOST (Ft/év):</b> ${fmtFt(costNow)} <span class="muted">~ ${fmtFtShort(costNow/12)} Ft/hó</span><br/>
+          <b>CÉL (Ft/év):</b> ${fmtFt(costTarget)} <span class="muted">~ ${fmtFtShort(costTarget/12)} Ft/hó</span><br/>
+          <div class="hr"></div>
+          <b>Különbség:</b> ${fmtFt(savingYear)} <span class="muted">~ ${fmtFtShort(savingMonth)} Ft/hó</span><br/>
+          <b>Javulás (hőigény):</b> ${fmtPct(improve*100)}<br/>
+          <span class="muted">Magyarázat: a “MOST” Ft/év értékből visszaszámoljuk a MOST hőigényt, majd ugyanazzal a kalibrációval számoljuk a CÉL hőigényt.</span>
+        </div>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">Prioritás (Ft/év alapján)</div>
+        <ol>
+          <li><b>${prio[0].k}:</b> ~ ${fmtFt(prio[0].v)} / év</li>
+          <li><b>${prio[1].k}:</b> ~ ${fmtFt(prio[1].v)} / év</li>
+          <li><b>${prio[2].k}:</b> ~ ${fmtFt(prio[2].v)} / év</li>
+          <li><b>${prio[3].k}:</b> ~ ${fmtFt(prio[3].v)} / év</li>
+        </ol>
+        <div class="muted tiny">Tipp: a Felújítási terv fül az Elemzés után aktiválódik.</div>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">Beruházás + megtérülés (irány)</div>
+        <ul>
+          <li><b>Födém:</b> ${fmtFt(inv.roofCost)} → megtérülés: <b>${fmtYears(pbRoof)}</b></li>
+          <li><b>Fal:</b> ${fmtFt(inv.wallCost)} → megtérülés: <b>${fmtYears(pbWall)}</b></li>
+          <li><b>Padló:</b> ${fmtFt(inv.floorCost)} → megtérülés: <b>${fmtYears(pbFloor)}</b></li>
+          <li><b>Fűtés:</b> ${fmtFt(inv.heatCost)} → megtérülés: <b>${fmtYears(pbHeat)}</b> <span class="muted">(csak ha csere van)</span></li>
+        </ul>
+      </div>
+
+      <details>
+        <summary>Technikai számok (ellenőrzéshez)</summary>
+        <div class="out" style="margin-top:10px;">
+          <div class="sectionTitle">H és hőigény</div>
+          <div class="muted">
+            H (MOST): ${(techNow.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techNow.Q_model)}<br/>
+            H (CÉL): ${(techTarget.H).toFixed(0)} W/K • Q_model: ${fmtKwh(techTarget.Q_model)}<br/>
+            Kalibrációs szorzó: ${calib.toFixed(2)}<br/>
+            Q_real(MOST): ${fmtKwh(techNow.Q_real)} • Q_real(CÉL): ${fmtKwh(techTarget.Q_real)}
+          </div>
+        </div>
+      </details>
+    `;
+
+    renderResult(html);
+
+    // ha terv nézeten vagyunk, frissítsük rögtön
+    if ((location.hash || "").includes("plan")) renderPlan();
+    if ((location.hash || "").includes("3d")) updateHeatmap();
+  }
+
+  if (btnRun) btnRun.addEventListener("click", () => {
+    flashBtn(btnRun);
+    calcAll();
+    toast("Kész — frissítve.");
+    scrollToResult();
+  });
+
+  if (btnReset) btnReset.addEventListener("click", () => {
+    flashBtn(btnReset);
+    setDefaults();
+    setPlanUnlocked(false);
+    EA_LAST = null;
+    toast("Alapértékek visszaállítva.");
+    renderResult(`
+      <div class="sectionTitle">Eredmény</div>
+      <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+    `);
+    if ((location.hash || "").includes("3d")) updateHeatmap();
+    if ((location.hash || "").includes("plan")) renderPlan();
+  });
+
+  // ---------- TUDÁSTÁR (ugyanaz, mint nálad) ----------
+  const DOCS = [
+    { id:"hdd", cat:"Alapok", read:"~3 perc", tags:["HDD","fűtés","alapok"], title:"Mi az a HDD (fűtési foknap) és miért számít?", body:`A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.<br/><br/><b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/><b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.`.trim() },
+    { id:"uvalue", cat:"Alapok", read:"~4 perc", tags:["U-érték","hőveszteség","fal"], title:"U-érték egyszerűen: mit jelent és mitől lesz jobb?", body:`Az <b>U-érték</b> (W/m²K) megmutatja, mennyi hő “szökik át” 1 m² szerkezeten 1°C különbségnél.<br/><br/><b>Kisebb U = jobb.</b> Szigetelésnél általában a fal/födém U-értéke csökken látványosan.<br/><br/>A kalkulátor “régi” tipikus U-ból indul, és a megadott cm + anyag alapján számolja a javulást.`.trim() },
+    { id:"airchange", cat:"Alapok", read:"~3 perc", tags:["légcsere","infiltráció","szellőzés"], title:"Légcsere (1/h): miért tud elvinni rengeteg pénzt?", body:`A légcsere a ház “szivárgását” jelzi: rések, rossz nyílászáró, kéményhatás.<br/><br/>A hőveszteség része: <b>Hvent = 0,33 × n × térfogat</b> (W/K).<br/><br/><b>Gyakorlat:</b> hiába szigetelsz, ha a ház “huzatos”, a megtakarítás kisebb lesz. Ezért van külön blokk a 3D nézetben is.`.trim() },
+    { id:"roof_first", cat:"Szigetelés", read:"~4 perc", tags:["födém","padlás","megtérülés"], title:"Miért a födém/padlás szigetelés szokott a legjobb első lépés lenni?", body:`A meleg levegő felfelé száll, ezért a födém sok háznál “fő veszteségcsatorna”.<br/><br/><b>Előny:</b> gyors kivitelezés, sokszor olcsóbb, és már 20–30 cm jó anyaggal látványos eredményt ad.<br/><br/>A kalkulátorban próbáld: csak a födémet állítsd CÉL-ra → nézd meg a Prioritás listában.`.trim() },
+    { id:"wall_eps_rw", cat:"Szigetelés", read:"~5 perc", tags:["EPS","kőzetgyapot","fal"], title:"EPS vagy kőzetgyapot? Rövid döntési szempontok", body:`<b>EPS:</b> jó ár/érték, könnyű, elterjedt. <b>Kőzetgyapot:</b> jobb pára- és tűztechnika, jó hanggátlás.<br/><br/>A hőszigetelés szempontjából mindkettő jó lehet, a különbséget gyakran a részletek adják: ragasztás, dübelezés, hálózás, lábazat, csomópontok.<br/><br/>Tipp: ha “hőhíd” problémád van, a kivitelezés minősége többet számít, mint az anyag neve.`.trim() },
+    { id:"floor", cat:"Szigetelés", read:"~4 perc", tags:["padló","aljzat","XPS"], title:"Padló/aljzat szigetelés: mikor éri meg?", body:`Padló szigetelés akkor ad nagyot, ha alatta hideg tér van (pince, szellőző légrés, talaj felől hideg).<br/><br/>Felújításnál gyakori, hogy bontással jár → ezért a megtérülés változó.<br/><br/>A kalkulátorban külön “csak padló” összehasonlítással látod, mennyi Ft/év jön ki belőle.`.trim() },
+    { id:"boiler_vs_hp", cat:"Fűtés", read:"~5 perc", tags:["kazán","hőszivattyú","SCOP"], title:"Kazáncsere vagy hőszivattyú? Miért fontos a SCOP?", body:`Hőszivattyúnál a <b>SCOP</b> az éves átlagos hatásfokot jelzi: mennyi hő lesz 1 kWh villanyból.<br/><br/><b>Példa:</b> SCOP 3,6 → 1 kWh villanyból ~3,6 kWh hő.<br/><br/>Fontos: ha a ház nincs rendben (szigetelés/légzárás), a fűtéscsere önmagában sokszor kevésbé “üt”, mint gondolnád.`.trim() },
+    { id:"cond_boiler", cat:"Fűtés", read:"~3 perc", tags:["kondenz","kazán","hatásfok"], title:"Kondenzációs kazán: mikor hoz látványos javulást?", body:`Régi kazánhoz képest a kondenzációs kazán hatásfoka jobb, főleg alacsonyabb előremenő hőmérsékleten.<br/><br/><b>Ha radiátor + magas előremenő</b> van, a különbség lehet kisebb, mint padlófűtésnél.<br/><br/>A kalkulátorban: állítsd MOST = régi kazán, CÉL = kondenz → nézd meg a “csak fűtés” hatást.`.trim() },
+    { id:"thermal_bridges", cat:"Tipikus hibák", read:"~4 perc", tags:["hőhíd","csomópont","penész"], title:"Hőhidak: miért lehet penész akkor is, ha szigeteltél?", body:`A hőhíd olyan pont, ahol a hő “könnyebben” távozik (koszorú, áthidaló, erkélylemez, lábazat, csatlakozások).<br/><br/>Ha a felület lehűl, kicsapódhat a pára → penész kockázat.<br/><br/>Ezért van a kalkulátorban <b>hőhíd korrekció</b>: ha sok a csomóponti hiba, a valós megtakarítás kisebb lehet.`.trim() },
+    { id:"air_sealing_mistake", cat:"Tipikus hibák", read:"~3 perc", tags:["légzárás","huzat","szalag"], title:"Tipikus hiba: szigetelés van, de a ház továbbra is “huzatos”", body:`Szigetelés mellett is elmehet a hő, ha nincs légzárás: rossz ablakbeépítés, rések, padlásfeljáró, kémény környéke.<br/><br/><b>Gyors ellenőrzés:</b> hideg napon kézzel/füsttel érezhető-e áramlás a kritikus helyeken?<br/><br/>A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyásol mindent.`.trim() },
+    { id:"questions_for_contractor", cat:"Kérdéslista", read:"~5 perc", tags:["kivitelező","kérdések","minőség"], title:"10 kérdés kivitelezőnek, hogy ne bukj a részleteken", body:`1) Milyen csomóponti megoldást adsz koszorúnál/lábazatnál?<br/>2) Mivel ragasztasz, dűbelezés hogyan lesz?<br/>3) Párazárás/páratechnika: hol kritikus?<br/>4) Milyen vastagságot miért javasolsz?<br/>5) Milyen hálózás, élvédő, indítóprofil lesz?<br/>6) Milyen minőségű anyagot hozol (márka, rendszer)?<br/>7) Fotózod-e a rétegrendet kivitelezés közben?<br/>8) Garancia mire és mennyi?<br/>9) Mikor fizetek és milyen ütemezéssel?<br/>10) Mi a leggyakoribb hibapont ennél a háznál?<br/><b>Tipp:</b> ha erre bizonytalan válaszokat kapsz, az már jel.`.trim() }
+  ];
+
+  let docFilterCat = "Összes";
+  let docSearch = "";
+  let docSelectedId = (DOCS[0] && DOCS[0].id) ? DOCS[0].id : null;
+
+  function getDocChips(){
+    const byId = Array.from(document.querySelectorAll('[id^="docChip"]'));
+    const byData = Array.from(document.querySelectorAll('[data-doc-cat]'));
+    return Array.from(new Set([...byId, ...byData]));
+  }
+
+  function getChipCategory(el){
+    const dc = (el?.dataset?.docCat || "").trim();
+    if (dc) return dc;
+    if (el?.id === "docChipAll") return "Összes";
+    const txt = (el?.textContent || "").trim();
+    return txt || "Összes";
+  }
+
+  function setDocChipActive(activeEl){
+    getDocChips().forEach(c => c.classList.remove("active"));
+    if (activeEl) activeEl.classList.add("active");
+  }
+
+  function renderDocs() {
+    const searchEl = $("docSearch");
+    const listEl = $("docList");
+    const viewEl = $("docView");
+    const countEl = $("docCount");
+    if (!listEl || !viewEl) return;
+
+    const q = (docSearch || "").trim().toLowerCase();
+    const filtered = DOCS.filter(d => {
+      const catOk = (docFilterCat === "Összes") ? true : d.cat === docFilterCat;
+      if (!catOk) return false;
+      if (!q) return true;
+      const text = `${d.title} ${d.body} ${(d.tags||[]).join(" ")}`.toLowerCase();
+      return text.includes(q);
+    });
+
+    if (countEl) countEl.textContent = String(filtered.length);
+
+    if (docSelectedId && !filtered.some(d => d.id === docSelectedId)) {
+      docSelectedId = filtered[0]?.id || null;
+    }
+    if (!docSelectedId && filtered[0]) docSelectedId = filtered[0].id;
+
+    listEl.innerHTML = filtered.map(d => {
+      const active = d.id === docSelectedId ? "active" : "";
+      return `
+        <div class="docItem ${active}" data-doc="${d.id}">
+          <div class="docTitle">${d.title}</div>
+          <p class="docMeta">kategória: <b>${d.cat}</b> • ${d.read} • #${d.tags.join(" #")}</p>
+        </div>
+      `;
+    }).join("");
+
+    const sel = DOCS.find(d => d.id === docSelectedId) || filtered[0];
+    if (sel) {
+      viewEl.innerHTML = `
+        <div class="miniTitle">${sel.title}</div>
+        <div class="docMeta">kategória: <b>${sel.cat}</b> • ${sel.read} • #${sel.tags.join(" #")}</div>
+        <div class="docBody">${sel.body}</div>
+      `;
     } else {
-      parts = {
-        Roof: Math.max(0, now.Hroof - target.Hroof),
-        Wall: Math.max(0, now.Hwall - target.Hwall),
-        Win: Math.max(0, now.Hwin - target.Hwin),
-        Floor: Math.max(0, now.Hfloor - target.Hfloor),
-        Vent: Math.max(0, now.Hvent - target.Hvent),
-      };
+      viewEl.innerHTML = `<div class="miniTitle">Nincs találat</div><div class="muted">Próbáld más kulcsszóval.</div>`;
     }
 
-    const total = Math.max(0.0001, parts.Roof + parts.Wall + parts.Win + parts.Floor + parts.Vent);
-    const maxV = Math.max(parts.Roof, parts.Wall, parts.Win, parts.Floor, parts.Vent, 0.0001);
-
-    applyHmClass(hmRoof, parts.Roof / maxV);
-    applyHmClass(hmWallL, parts.Wall / maxV);
-    applyHmClass(hmWallR, parts.Wall / maxV);
-    applyHmClass(hmWin, parts.Win / maxV);
-    applyHmClass(hmFloor, parts.Floor / maxV);
-    applyHmClass(hmVent, parts.Vent / maxV);
-
-    if (hmList) {
-      const rows = [
-        { name: "Légcsere", v: parts.Vent },
-        { name: "Ablak", v: parts.Win },
-        { name: "Padló", v: parts.Floor },
-        { name: "Fal", v: parts.Wall },
-        { name: "Födém", v: parts.Roof },
-      ]
-        .map((x) => {
-          const pct = (x.v / total) * 100;
-          return `
-            <div class="hmRow">
-              <div class="hmName">${x.name}</div>
-              <div class="hmBar"><div class="hmFill" style="width:${clamp(pct, 0, 100)}%"></div></div>
-              <div class="hmPct">${fmt1(pct)}%</div>
-              <div class="hmSub muted tiny">H hozzájárulás: <b>${fmt1(x.v)} W/K</b></div>
-            </div>
-          `;
-        })
-        .join("");
-
-      hmList.innerHTML = rows;
-    }
-
-    if (hmExplain) {
-      if (hmMode === "now") hmExplain.textContent = "MOST: megmutatja, hol szökik el most a legtöbb hő (prioritás).";
-      else if (hmMode === "target") hmExplain.textContent = "CÉL: megmutatja, hogy cél állapotban hol marad veszteség.";
-      else {
-        const items = [
-          { n: "Légcsere", v: parts.Vent },
-          { n: "Ablak", v: parts.Win },
-          { n: "Padló", v: parts.Floor },
-          { n: "Fal", v: parts.Wall },
-          { n: "Födém", v: parts.Roof },
-        ].sort((a, b) => b.v - a.v);
-        hmExplain.textContent = `KÜLÖNBSÉG: a legnagyobb “nyereség” várhatóan itt jön: ${items[0]?.n || "–"}.`;
-      }
-    }
-  }
-
-  // ---------------- PRO summary + gombok ----------------
-  function renderProSummary() {
-    if (!proSummary) return;
-
-    const s = { ...defaults(), ...collectState() };
-    const g = resolveGeometry(s);
-
-    proSummary.innerHTML = `
-      <div class="miniTitle">Mód: ${g.mode}</div>
-      <div class="muted" style="margin-top:6px;">
-        Fal bruttó: <b>${fmt1(g.wallGross)} m²</b><br/>
-        Ablak: <b>${fmt1(g.winArea)} m²</b><br/>
-        Fal nettó: <b>${fmt1(g.wallNet)} m²</b><br/>
-        Födém/padlás: <b>${fmt1(g.roofArea)} m²</b><br/>
-        Padló: <b>${fmt1(g.floorArea)} m²</b><br/>
-        Térfogat: <b>${fmt1(g.volume)} m³</b><br/>
-        <span class="tiny muted">kerület: ${fmt1(g.perim)} m • footprint: ${fmt1(g.footprint)} m² • szintek: ${g.storeys} • belmagasság: ${fmt1(g.height)} m</span>
-      </div>
-    `;
-  }
-
-  function setProEnabled(on) {
-    if ($("proEnabled")) $("proEnabled").value = on ? "1" : "0";
-    saveStateLocal(false);
-    renderProSummary();
-    toast(on ? "PRO bekapcsolva." : "PRO kikapcsolva.");
-  }
-
-  // ---------------- docs ----------------
-  function seedDocs() {
-    if (localStorage.getItem(LS_DOCS)) return;
-
-    const docs = [
-      { id: "hdd", cat: "basics", mins: 3, title: "Mi az a HDD (fűtési foknap) és miért számít?",
-        tags: ["HDD", "fűtés", "alapok"],
-        body: `<p>A <b>HDD</b> (Heating Degree Days) azt mutatja, mennyire volt hideg egy évben/idényben.</p>
-               <p><b>HU irány:</b> ~3000 (településtől függ).</p>` },
-      { id: "vent", cat: "basics", mins: 3, title: "Légcsere (1/h): miért tud elvinni rengeteg pénzt?",
-        tags: ["légcsere", "infiltráció"],
-        body: `<p>Ha a ház huzatos, a meleg kijut, a hideg bejön → a fűtés ezt pótolja.</p>` },
-      { id: "attic", cat: "ins", mins: 4, title: "Miért a födém/padlás szigetelés szokott a legjobb első lépés lenni?",
-        tags: ["födém", "padlás", "megtérülés"],
-        body: `<p>Felfelé szökik a meleg — ezért a födém gyakran top veszteség.</p>` },
-      { id: "bridges", cat: "mist", mins: 4, title: "Hőhidak: miért lehet penész akkor is, ha szigeteltél?",
-        tags: ["hőhíd", "penész"],
-        body: `<p>A hőhíd helyén hidegebb a felület → ott kicsapódhat a pára.</p>` },
-      { id: "qlist", cat: "list", mins: 5, title: "10 kérdés kivitelezőnek, hogy ne bukj a részleteken",
-        tags: ["kivitelező", "kérdések"],
-        body: `<ol>
-                 <li>Csomópontok: koszorú/lábazat/ablak körül?</li>
-                 <li>Mi van benne az árban (állvány, szállítás, törmelék)?</li>
-                 <li>Garancia mire és mennyi?</li>
-               </ol>` },
-    ];
-
-    localStorage.setItem(LS_DOCS, JSON.stringify(docs));
-  }
-
-  function loadDocs() {
-    seedDocs();
-    try { return JSON.parse(localStorage.getItem(LS_DOCS) || "[]"); }
-    catch { return []; }
-  }
-
-  function setActiveChip(cat) {
-    activeDocCat = cat;
-    [chipAll, chipBasics, chipIns, chipHeat, chipMist, chipList].filter(Boolean).forEach((c) => c.classList.remove("active"));
-    if (cat === "all" && chipAll) chipAll.classList.add("active");
-    if (cat === "basics" && chipBasics) chipBasics.classList.add("active");
-    if (cat === "ins" && chipIns) chipIns.classList.add("active");
-    if (cat === "heat" && chipHeat) chipHeat.classList.add("active");
-    if (cat === "mist" && chipMist) chipMist.classList.add("active");
-    if (cat === "list" && chipList) chipList.classList.add("active");
-    renderDocs();
-  }
-
-  function openDoc(id) {
-    const docs = loadDocs();
-    const d = docs.find((x) => x.id === id);
-    if (!d || !docView) return;
-    activeDocId = id;
-
-    const catName =
-      d.cat === "basics" ? "Alapok" :
-      d.cat === "ins" ? "Szigetelés" :
-      d.cat === "heat" ? "Fűtés" :
-      d.cat === "mist" ? "Tipikus hibák" : "Kérdéslista";
-
-    docView.innerHTML = `
-      <div class="docArticle">
-        <div class="docTitleBig">${d.title}</div>
-        <div class="muted tiny">kategória: <b>${catName}</b> • ~${d.mins || 3} perc</div>
-        <div class="docBody" style="margin-top:12px;">${d.body || ""}</div>
-      </div>
-    `;
-
-    // list active jelölés frissítés
-    renderDocs(true);
-  }
-
-  function renderDocs(keepSelection = false) {
-    if (!viewDocs) return;
-
-    const docs = loadDocs();
-    const q = (docSearch && docSearch.value ? docSearch.value : "").trim().toLowerCase();
-
-    let filtered = docs;
-    if (activeDocCat !== "all") filtered = filtered.filter((d) => d.cat === activeDocCat);
-
-    if (q) {
-      filtered = filtered.filter((d) => {
-        const hay = (d.title + " " + (d.tags || []).join(" ") + " " + (d.body || "")).toLowerCase();
-        return hay.includes(q);
-      });
-    }
-
-    if (docCount) docCount.textContent = String(filtered.length);
-
-    if (docList) {
-      docList.innerHTML = filtered
-        .map((d) => {
-          const isActive = d.id === activeDocId;
-          return `
-            <div class="docItem ${isActive ? "active" : ""}" data-doc="${d.id}">
-              <div class="docTitle">${d.title}</div>
-              <div class="muted tiny">~${d.mins || 3} perc • ${(d.tags || []).slice(0, 4).map(t => `#${t}`).join(" ")}</div>
-            </div>
-          `;
-        })
-        .join("");
-
-      Array.from(docList.querySelectorAll(".docItem")).forEach((el) => {
-        el.addEventListener("click", () => openDoc(el.getAttribute("data-doc")));
-      });
-    }
-
-    if (!keepSelection) {
-      if (!activeDocId && filtered.length > 0) openDoc(filtered[0].id);
-      if (filtered.length === 0 && docView) {
-        docView.innerHTML = `<div class="muted">Nincs találat.</div>`;
-        activeDocId = null;
-      }
-    }
-  }
-
-  // ---------------- calc run ----------------
-  function runAnalysis() {
-    const s = { ...defaults(), ...collectState() };
-
-    if (!s.area || Number(s.area) <= 0) s.area = 100;
-    if (!s.annualCostNow || Number(s.annualCostNow) <= 0) {
-      toast("Add meg az éves fűtési költséget MOST (Ft/év).");
-      return;
-    }
-
-    const r = computeFull(s);
-    renderResult(r);
-    toast("Elemzés kész.");
-
-    if (activeView === "3d") renderHeatmapFromLast();
-    if (activeView === "plan") renderPlanFromLast();
-  }
-
-  function resetDefaults() {
-    applyState(defaults());
-    renderProSummary();
-    toast("Alapértékek beállítva.");
-  }
-
-  function shareLink() {
-    saveStateLocal(false);
-    const url = new URL(window.location.href);
-    url.hash = "#calc&share=1";
-    navigator.clipboard
-      .writeText(url.toString())
-      .then(() => toast("Megosztási link kimásolva."))
-      .catch(() => toast("Link kész (nem tudtam másolni vágólapra)."));
-  }
-
-  // ---------------- bind events ----------------
-  function bindNav() {
-    if (btnHome) btnHome.addEventListener("click", () => go("home"));
-    if (btnCalc) btnCalc.addEventListener("click", () => go("calc"));
-    if (btnPro) btnPro.addEventListener("click", () => go("pro"));
-
-    if (btnPlan) {
-      btnPlan.addEventListener("click", () => {
-        if (!safeReadLast()) {
-          toast("Előbb futtasd az Elemzést.");
-          go("calc");
-          return;
-        }
-        go("plan");
-      });
-    }
-
-    if (btn3d) btn3d.addEventListener("click", () => go("3d"));
-    if (btnDocs) btnDocs.addEventListener("click", () => go("docs"));
-
-    if (homeGoCalc) homeGoCalc.addEventListener("click", () => go("calc"));
-    if (homeGoDocs) homeGoDocs.addEventListener("click", () => go("docs"));
-  }
-
-  function bindCalcButtons() {
-    if (btnCalcRun) btnCalcRun.addEventListener("click", runAnalysis);
-    if (btnReset) btnReset.addEventListener("click", resetDefaults);
-    if (btnShare) btnShare.addEventListener("click", shareLink);
-    if (btnLead) btnLead.addEventListener("click", () => (window.location.href = SZAKIPIAC_HOME_URL));
-
-    if (btnSaveState) btnSaveState.addEventListener("click", () => saveStateLocal(true));
-    if (btnLoadState) btnLoadState.addEventListener("click", loadStateLocal);
-    if (btnClearState) btnClearState.addEventListener("click", clearStateLocal);
-
-    if (btnExportState) btnExportState.addEventListener("click", exportJson);
-    if (btnImportState) btnImportState.addEventListener("click", importJson);
-
-    if (btnExportPDF) btnExportPDF.addEventListener("click", () => window.print());
-  }
-
-  function bindPro() {
-    // élő összegzés: bármely input változik → friss
-    proIds.forEach((id) => {
-      const el = $(id);
-      if (!el) return;
-      el.addEventListener("input", () => {
-        renderProSummary();
-        saveStateLocal(false);
-      });
-      el.addEventListener("change", () => {
-        renderProSummary();
-        saveStateLocal(false);
+    listEl.querySelectorAll(".docItem").forEach(el => {
+      el.addEventListener("click", () => {
+        docSelectedId = el.getAttribute("data-doc");
+        renderDocs();
       });
     });
 
-    if (btnProApply) {
-      btnProApply.addEventListener("click", () => {
-        setProEnabled(true);
-        go("calc"); // vissza calc, hogy “futtasd újra”
+    if (searchEl) searchEl.value = docSearch;
+  }
+
+  const docSearchEl = $("docSearch");
+  if (docSearchEl) {
+    docSearchEl.addEventListener("input", (e) => {
+      docSearch = e.target.value || "";
+      renderDocs();
+    });
+  }
+
+  (function bindDocChips(){
+    const chips = getDocChips();
+    chips.forEach(chip => {
+      chip.addEventListener("click", () => {
+        docFilterCat = getChipCategory(chip);
+        docSelectedId = null;
+        setDocChipActive(chip);
+        renderDocs();
+      });
+    });
+
+    const chipAll = $("docChipAll") || chips.find(c => getChipCategory(c) === "Összes") || null;
+    if (chipAll) setDocChipActive(chipAll);
+  })();
+
+  // ---------- HEATMAP (MVP) ----------
+  let hmMode = "now"; // now | target | delta
+
+  const hmModeNow = $("hmModeNow");
+  const hmModeTarget = $("hmModeTarget");
+  const hmModeDelta = $("hmModeDelta");
+
+  function setHmActive(btn){
+    [hmModeNow, hmModeTarget, hmModeDelta].forEach(b => b?.classList.remove("active"));
+    btn?.classList.add("active");
+  }
+
+  hmModeNow?.addEventListener("click", () => { hmMode = "now"; setHmActive(hmModeNow); updateHeatmap(); });
+  hmModeTarget?.addEventListener("click", () => { hmMode = "target"; setHmActive(hmModeTarget); updateHeatmap(); });
+  hmModeDelta?.addEventListener("click", () => { hmMode = "delta"; setHmActive(hmModeDelta); updateHeatmap(); });
+
+  function colorForValue01(x){
+    const v = clamp(x, 0, 1);
+    const stops = [
+      { t: 0.00, c: [ 30, 110, 255] },
+      { t: 0.25, c: [  0, 210, 255] },
+      { t: 0.50, c: [  0, 220, 120] },
+      { t: 0.75, c: [255, 215,   0] },
+      { t: 1.00, c: [255,  60,  60] },
+    ];
+    const lerp = (a,b,t) => a + (b-a)*t;
+
+    let a = stops[0], b = stops[stops.length-1];
+    for (let i=0; i<stops.length-1; i++){
+      const s1 = stops[i], s2 = stops[i+1];
+      if (v >= s1.t && v <= s2.t){ a = s1; b = s2; break; }
+    }
+    const tt = (b.t === a.t) ? 0 : (v - a.t) / (b.t - a.t);
+    const r = Math.round(lerp(a.c[0], b.c[0], tt));
+    const g = Math.round(lerp(a.c[1], b.c[1], tt));
+    const bl = Math.round(lerp(a.c[2], b.c[2], tt));
+    return `rgba(${r},${g},${bl},0.82)`;
+  }
+
+  function setBlock(id, v01){
+    const el = $(id);
+    if (!el) return;
+    el.style.background = colorForValue01(v01);
+  }
+
+  function scenarioFromInputs(which){
+    const x = readInputs();
+    if (which === "now") {
+      return computeScenario({
+        area: x.area, storeys: x.storeys, height: x.height,
+        wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+        wallInsCm: x.wallInsNow, wallInsMat: x.wallInsMat,
+        roofInsCm: x.roofInsNow, roofInsMat: x.roofInsMat,
+        floorInsCm: x.floorInsNow, floorInsMat: x.floorInsMat
       });
     }
-    if (btnProOff) {
-      btnProOff.addEventListener("click", () => {
-        setProEnabled(false);
-        go("calc");
-      });
+    return computeScenario({
+      area: x.area, storeys: x.storeys, height: x.height,
+      wallType: x.wallType, winRatio: x.winRatio, nAir: x.nAir, bridgePct: x.bridge,
+      wallInsCm: x.wallInsTarget, wallInsMat: x.wallInsMat,
+      roofInsCm: x.roofInsTarget, roofInsMat: x.roofInsMat,
+      floorInsCm: x.floorInsTarget, floorInsMat: x.floorInsMat
+    });
+  }
+
+  function updateHeatmap(){
+    const list = $("hmList");
+    if (!list) return;
+
+    const now = scenarioFromInputs("now");
+    const target = scenarioFromInputs("target");
+
+    const partsNow = now.H.parts;
+    const partsTar = target.H.parts;
+
+    const keys = ["roof","wall","window","floor","vent"];
+
+    let parts = {};
+    let explain = "";
+
+    if (hmMode === "now") {
+      parts = partsNow;
+      explain = "MOST: megmutatja, hogy a jelenlegi állapotban hol megy el a hő arányosan (H bontás).";
+    } else if (hmMode === "target") {
+      parts = partsTar;
+      explain = "CÉL: megmutatja, hogy a cél állapotban hol marad veszteség (még szigetelés után is).";
+    } else {
+      keys.forEach(k => parts[k] = Math.max(0, partsNow[k] - partsTar[k]));
+      explain = "KÜLÖNBSÉG: azt mutatja, hol csökken a legjobban a veszteség MOST → CÉL között.";
     }
+
+    const maxPart = keys.reduce((m,k)=> Math.max(m, parts[k]||0), 0) || 1;
+
+    const ratios = {};
+    keys.forEach(k => {
+      const raw = (parts[k]||0) / maxPart;
+      ratios[k] = Math.pow(clamp(raw,0,1), 0.65);
+    });
+
+    setBlock("hmRoof", ratios.roof);
+    setBlock("hmFloor", ratios.floor);
+    setBlock("hmVent", ratios.vent);
+
+    setBlock("hmWallL", ratios.wall);
+    setBlock("hmWallC", ratios.wall);
+    setBlock("hmWallR", ratios.wall);
+
+    setBlock("hmWin", ratios.window);
+
+    const labelMap = {
+      roof: "Födém",
+      wall: "Fal",
+      window: "Ablak",
+      floor: "Padló",
+      vent: "Légcsere"
+    };
+
+    const total = keys.reduce((s,kk)=> s + (parts[kk]||0), 0) || 1;
+
+    const rows = keys
+      .map(k => ({
+        k,
+        label: labelMap[k],
+        val: parts[k] || 0,
+        pct: ((parts[k]||0) / total) * 100
+      }))
+      .sort((a,b)=> b.val - a.val);
+
+    list.innerHTML = rows.map(r => `
+      <div class="hmRow">
+        <div class="hmTop">
+          <div>${r.label}</div>
+          <div>${fmtPct(r.pct)}</div>
+        </div>
+        <div class="hmBar"><div class="hmFill" style="width:${Math.round(r.pct)}%"></div></div>
+        <div class="hmMeta">H hozzájárulás: <b>${r.val.toFixed(0)} W/K</b></div>
+      </div>
+    `).join("");
+
+    const ex = $("hmExplain");
+    if (ex) ex.textContent = explain;
   }
 
-  function bind3D() {
-    if (hmModeNow) hmModeNow.addEventListener("click", () => setHmMode("now"));
-    if (hmModeTarget) hmModeTarget.addEventListener("click", () => setHmMode("target"));
-    if (hmModeDelta) hmModeDelta.addEventListener("click", () => setHmMode("delta"));
-    if (btnExportPDF_3D) btnExportPDF_3D.addEventListener("click", () => window.print());
+  // ---------- initByHash (share betöltéssel) ----------
+  function initByHash() {
+    const { view } = parseHash();
+    const onlyCalcExists = !!viewCalc && !viewHome && !viewPlan && !view3d && !viewDocs;
 
-    setHmMode(hmMode);
+    if (onlyCalcExists) {
+      showView("calc");
+      tryApplyShareFromUrl();
+      return;
+    }
+
+    if (view === "calc") { showView("calc"); tryApplyShareFromUrl(); return; }
+    if (view === "plan") { showView("plan"); return; }
+    if (view === "3d") return showView("3d");
+    if (view === "docs") return showView("docs");
+    return showView("home");
   }
 
-  function bindDocs() {
-    if (docSearch) docSearch.addEventListener("input", () => renderDocs(false));
-    if (chipAll) chipAll.addEventListener("click", () => setActiveChip("all"));
-    if (chipBasics) chipBasics.addEventListener("click", () => setActiveChip("basics"));
-    if (chipIns) chipIns.addEventListener("click", () => setActiveChip("ins"));
-    if (chipHeat) chipHeat.addEventListener("click", () => setActiveChip("heat"));
-    if (chipMist) chipMist.addEventListener("click", () => setActiveChip("mist"));
-    if (chipList) chipList.addEventListener("click", () => setActiveChip("list"));
+  // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) =====
+  (function bindLeadButton(){
+    const btnLead = document.getElementById("btnLead");
+    if (!btnLead) return;
+
+    btnLead.addEventListener("click", () => {
+      flashBtn(btnLead);
+      toast("Vissza a SzakiPiacra…");
+      goToSzakipiacHome();
+    });
+  })();
+
+  // ---------- START ----------
+  setDefaults();
+  setPlanUnlocked(false);
+
+  bindShareButton();
+  bindStateButtons();        // Mentés/Betöltés/Törlés (böngésző)
+  bindExportImportButtons(); // Export/Import (fájl)
+  bindPdfButtons();          // PDF
+
+  initByHash();
+  window.addEventListener("hashchange", initByHash);
+
+  // „← SzakiPiac” gomb
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
+  } else {
+    addBackToSzakipiacButton();
   }
 
-  // ---------------- small fallback styles ----------------
-  function ensureFallbackStyles() {
-    const id = "ea_fallback_styles_v1";
-    if ($(id)) return;
-    const st = document.createElement("style");
-    st.id = id;
-    st.textContent = `
-      .hmHot{ filter:saturate(1.2); }
-      .hmMid{ filter:saturate(1.05); opacity:.95; }
-      .hmCool{ filter:saturate(.9); opacity:.9; }
-
-      .hmRow{ padding:10px 10px; border:1px solid rgba(255,255,255,.08); border-radius:14px; margin-bottom:10px; background:rgba(15,20,35,.25); }
-      .hmName{ font-weight:600; margin-bottom:6px; }
-      .hmBar{ height:8px; border-radius:999px; overflow:hidden; background:rgba(255,255,255,.08); }
-      .hmFill{ height:100%; background:rgba(120,180,255,.75); }
-
-      .docItem{ cursor:pointer; padding:12px; border:1px solid rgba(255,255,255,.08); border-radius:14px; margin-bottom:10px; background:rgba(15,20,35,.22); }
-      .docItem.active{ outline:2px solid rgba(120,180,255,.35); }
-      .docTitle{ font-weight:700; }
-      .docTitleBig{ font-size:20px; font-weight:800; }
-    `;
-    document.head.appendChild(st);
-  }
-
-  // ---------------- init ----------------
-  function init() {
-    ensureFallbackStyles();
-    ensureSzakiPiacButton();
-
-    bindNav();
-    bindCalcButtons();
-    bindPro();
-    bind3D();
-    bindDocs();
-
-    const saved = localStorage.getItem(LS_KEY);
-    if (saved) loadStateLocal();
-    else applyState(defaults());
-
-    renderProSummary();
-    updatePlanLock();
-
-    const h = (window.location.hash || "").toLowerCase();
-    if (h.includes("docs")) go("docs");
-    else if (h.includes("3d")) go("3d");
-    else if (h.includes("plan")) go("plan");
-    else if (h.includes("pro")) go("pro");
-    else if (h.includes("calc")) go("calc");
-    else go("home");
-
-    if (viewDocs) renderDocs(false);
-    renderHeatmapFromLast();
-  }
-
-  init();
 })();
