@@ -21,6 +21,7 @@
     <nav class="nav">
       <button id="btnHome" class="navBtn active">Kezdő</button>
       <button id="btnCalc" class="navBtn">Kalkulátor</button>
+      <button id="btnPro" class="navBtn">PRO</button>
       <button id="btnPlan" class="navBtn" aria-disabled="true" title="Előbb futtasd az Elemzést.">Felújítási terv</button>
       <button id="btn3d" class="navBtn">3D nézet</button>
       <button id="btnDocs" class="navBtn">Tudástár</button>
@@ -74,7 +75,6 @@
           <div class="muted">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</div>
         </div>
 
-        <!-- ✅ EZ A FELSŐ SOR OLYAN, MINT A KÉPEN -->
         <div class="headBtns">
           <button id="btnSaveState" class="btn ghost">💾 Mentés</button>
           <button id="btnLoadState" class="btn ghost">📥 Betöltés</button>
@@ -239,6 +239,10 @@
             <label class="field">Fűtéscsere (Ft)
               <input id="costHeating" type="number" min="0" step="50000" />
             </label>
+
+            <div class="tiny muted" style="margin-top:10px;">
+              Tipp: ha pontosabb felületeket akarsz (fal m², födém m², padló m²), menj a <b>PRO</b> fülre és kapcsold be a PRO geometriát.
+            </div>
           </details>
 
           <div class="calcBtns">
@@ -260,7 +264,113 @@
       </div>
     </section>
 
-    <!-- PLAN (ÚJ NÉZET) -->
+    <!-- PRO -->
+    <section id="viewPro" class="card" style="display:none;">
+      <div class="sectionHead">
+        <div>
+          <div class="sectionTitle">PRO geometria (pontosabb m² számítás)</div>
+          <div class="muted">Itt megadhatsz valós méreteket: alaprajz (hossz×szél), kerület, fal m², ablak m², födém/padló m², térfogat. Ha bekapcsolod, a kalkulátor ebből számol.</div>
+        </div>
+        <div class="headBtns">
+          <button id="btnProApply" class="btn primary">✅ PRO alkalmazása</button>
+          <button id="btnProOff" class="btn ghost">⛔ PRO kikapcsolása</button>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <div class="panelTitle">PRO beállítások</div>
+
+          <label class="field">PRO geometria bekapcsolása
+            <select id="proEnabled">
+              <option value="0">Kikapcsolva (AUTO számítás)</option>
+              <option value="1">Bekapcsolva (PRO felületek)</option>
+            </select>
+          </label>
+
+          <label class="field">Szinkronizálja az Alapterületet (m²) a PRO geometriából?
+            <select id="proSyncArea">
+              <option value="1">Igen (ajánlott)</option>
+              <option value="0">Nem (kézi alapterület marad)</option>
+            </select>
+          </label>
+
+          <div class="out" style="margin-top:10px;">
+            <div class="miniTitle">1) Alaprajz (hossz × szélesség) – ajánlott</div>
+            <div class="grid2" style="margin-top:10px;">
+              <label class="field">Hossz (m)
+                <input id="proLen" type="number" min="0" step="0.1" />
+              </label>
+              <label class="field">Szélesség (m)
+                <input id="proWid" type="number" min="0" step="0.1" />
+              </label>
+            </div>
+            <div class="tiny muted">Ebből számol: kerület = 2×(hossz+szél), födém/padló = hossz×szél.</div>
+          </div>
+
+          <div class="out" style="margin-top:10px;">
+            <div class="miniTitle">2) Felülírások (ha kell)</div>
+
+            <label class="field">Külső fal kerület (m) – ha nem téglalap
+              <input id="proPerim" type="number" min="0" step="0.1" />
+            </label>
+
+            <label class="field">Fal bruttó felület (m²) – kézi megadás
+              <input id="proWallArea" type="number" min="0" step="1" />
+            </label>
+
+            <label class="field">Ablak felület (m²) – kézi megadás (felülírja az % ablakarányt)
+              <input id="proWinArea" type="number" min="0" step="1" />
+            </label>
+
+            <div class="grid2" style="margin-top:10px;">
+              <label class="field">Födém/padlás felület (m²) – kézi
+                <input id="proRoofArea" type="number" min="0" step="1" />
+              </label>
+              <label class="field">Padló/aljzat felület (m²) – kézi
+                <input id="proFloorArea" type="number" min="0" step="1" />
+              </label>
+            </div>
+
+            <label class="field">Térfogat (m³) – kézi megadás (ha bonyolult)
+              <input id="proVolume" type="number" min="0" step="1" />
+            </label>
+
+            <label class="field">Fűtött alapterület (m²) – kézi (ha eltér a geometriától)
+              <input id="proAreaTotal" type="number" min="0" step="1" />
+            </label>
+
+            <div class="tiny muted">
+              Prioritás: <b>Fal m²</b> ha megadod, az a legerősebb (felülír mindent). Utána kerület/hossz×szél.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panelTitle">Élő összegzés (amit a modell használ)</div>
+          <div id="proSummary" class="out">
+            <div class="muted">–</div>
+          </div>
+
+          <div class="out" style="margin-top:12px;">
+            <div class="miniTitle">Miért jó ez?</div>
+            <div class="muted">
+              A felújítási költséget eddig a modell “négyzetes” házból számolta. PRO módban valós fal/födém/padló m²-t kapsz,
+              így a beruházás és megtérülés sokkal hitelesebb.
+            </div>
+          </div>
+
+          <div class="out" style="margin-top:12px;">
+            <div class="miniTitle">Tipp</div>
+            <div class="muted">
+              Ha tudod a ház méretét (pl. 8×12), írd be, kapcsold be a PRO-t, és futtasd újra az Elemzést a Kalkulátor fülön.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAN -->
     <section id="viewPlan" class="card" style="display:none;">
       <div class="sectionHead">
         <div>
