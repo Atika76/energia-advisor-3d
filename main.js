@@ -122,8 +122,52 @@
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
-  // ✅ FONTOS: innen kivettem a "Vissza a SzakiPiacra" gomb JS-beszúrását,
-  // mert az csinálta a bekarikázott felesleges gombot.
+  // ================================
+  // „← SzakiPiac” gomb a NAV-BAN, a "Kezdő" ELÉ (a piros karikázott helyre)
+  // ================================
+  function addBackToSzakipiacButton() {
+    if (document.getElementById("eaBackToSzakipiac")) return;
+
+    const refBtn =
+      document.getElementById("btnHome") ||
+      document.getElementById("btnCalc") ||
+      document.getElementById("btn3d") ||
+      document.getElementById("btnDocs");
+
+    if (!refBtn) return;
+
+    const navGroup = refBtn.parentElement; // Kezdő / Kalkulátor / stb konténer
+    if (!navGroup) return;
+
+    const a = document.createElement("a");
+    a.id = "eaBackToSzakipiac";
+    a.href = SZAKIPIAC_HOME_URL;
+    a.textContent = "← SzakiPiac";
+
+    // Nav-gomb stílus átvétele
+    a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
+
+    // Ha valamiért üres a class, legyen minimál stílus
+    if (!a.className) {
+      a.style.cssText = `
+        display:inline-flex;
+        align-items:center;
+        padding:10px 16px;
+        border-radius:999px;
+        background:rgba(255,255,255,.08);
+        border:1px solid rgba(255,255,255,.15);
+        color:#eaf2ff;
+        text-decoration:none;
+        font-weight:600;
+        backdrop-filter: blur(6px);
+      `;
+    }
+
+    a.style.whiteSpace = "nowrap";
+
+    // NAV elejére: Kezdő elé
+    navGroup.insertBefore(a, refBtn);
+  }
 
   // ---------- Material lambdas (W/mK) ----------
   const LAMBDA = {
@@ -458,6 +502,81 @@
     if (btnShare){
       btnShare.addEventListener("click", async () => { flashBtn(btnShare); await shareLink(); });
     }
+  }
+
+  // =========================
+  // MENTÉS / BETÖLTÉS / TÖRLÉS (LocalStorage)
+  // =========================
+  const STATE_KEY = "ea3d_state_v1";
+
+  function bindStateButtons(){
+    const btnSave = $("btnSaveState");
+    const btnLoad = $("btnLoadState");
+    const btnClear = $("btnClearState");
+
+    if (btnSave){
+      btnSave.addEventListener("click", () => {
+        flashBtn(btnSave);
+        try{
+          const state = serializeState();
+          localStorage.setItem(STATE_KEY, JSON.stringify(state));
+          toast("Mentve ✅");
+        }catch(e){
+          console.error(e);
+          toast("Mentés hiba.");
+        }
+      });
+    }
+
+    if (btnLoad){
+      btnLoad.addEventListener("click", () => {
+        flashBtn(btnLoad);
+        try{
+          const raw = localStorage.getItem(STATE_KEY);
+          if (!raw){
+            toast("Nincs mentés.");
+            return;
+          }
+          const state = JSON.parse(raw);
+          applyState(state);
+          toast("Betöltve ✅");
+          if ((location.hash || "").includes("3d")) updateHeatmap();
+        }catch(e){
+          console.error(e);
+          toast("Betöltés hiba.");
+        }
+      });
+    }
+
+    if (btnClear){
+      btnClear.addEventListener("click", () => {
+        flashBtn(btnClear);
+        try{
+          localStorage.removeItem(STATE_KEY);
+          toast("Mentés törölve 🧹");
+        }catch(e){
+          console.error(e);
+          toast("Törlés hiba.");
+        }
+      });
+    }
+  }
+
+  // =========================
+  // PDF (egyszerű: nyomtatás PDF-be)
+  // =========================
+  function bindPdfButtons(){
+    const btnPdfCalc = $("btnExportPDF");
+    const btnPdf3d = $("btnExportPDF_3D");
+
+    const doPrint = (btn) => {
+      flashBtn(btn);
+      toast("PDF / Nyomtatás…");
+      setTimeout(() => window.print(), 150);
+    };
+
+    if (btnPdfCalc) btnPdfCalc.addEventListener("click", () => doPrint(btnPdfCalc));
+    if (btnPdf3d) btnPdf3d.addEventListener("click", () => doPrint(btnPdf3d));
   }
 
   // ---------- Core calc ----------
@@ -1118,8 +1237,17 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
   // ---------- START ----------
   setDefaults();
   bindShareButton();
+  bindStateButtons();   // ✅ Mentés/Betöltés/Törlés
+  bindPdfButtons();     // ✅ PDF (print)
   initByHash();
   window.addEventListener("hashchange", initByHash);
+
+  // ✅ felső „← SzakiPiac” gomb a Kezdő elé
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
+  } else {
+    addBackToSzakipiacButton();
+  }
 
   // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) – MOST MINDIG VISSZA A FŐOLDALRA =====
   (function bindLeadButton(){
