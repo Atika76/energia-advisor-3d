@@ -24,6 +24,9 @@
       <button id="btnPlan" class="navBtn" aria-disabled="true" title="Előbb futtasd az Elemzést.">Felújítási terv</button>
       <button id="btn3d" class="navBtn">3D nézet</button>
       <button id="btnDocs" class="navBtn">Tudástár</button>
+
+      <!-- PRO gomb (1 db, kérés szerint) -->
+      <button id="btnPro" class="navBtn" type="button" title="PRO mód: geometria + tetőforma">PRO</button>
     </nav>
   </header>
 
@@ -72,6 +75,7 @@
         <div>
           <div class="sectionTitle">Energia kalkulátor (Jelenlegi → Cél)</div>
           <div class="muted">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</div>
+          <div id="proBadge" class="muted tiny" style="display:none;margin-top:6px;"><b>PRO ON</b> • Geometria + tetőforma aktív</div>
         </div>
 
         <div class="headBtns">
@@ -87,6 +91,51 @@
           <button id="btnExportPDF" class="btn primary">🖨️ PDF</button>
         </div>
       </div>
+
+      <!-- PRO állapot rejtett input (hogy menthető legyen) -->
+      <input id="proOn" type="hidden" value="0" />
+
+      <!-- PRO mezők (csak ha PRO ON) -->
+      <details id="proFields" class="details" style="display:none; margin: 10px 0 14px;">
+        <summary>▶ PRO: Geometria + tetőforma (tényleges méretek)</summary>
+
+        <div class="muted tiny" style="margin-top:8px;">
+          Tipp: ha megadod a <b>hossz + szélesség</b> értéket, abból számolunk alapterületet és kerületet.
+          Ha ez nincs, megadhatsz csak <b>külső kerületet</b> is (m). A tetőfelület a tetőformából + hajlásszögből becsül.
+        </div>
+
+        <div class="grid3" style="margin-top:10px;">
+          <label class="field">Hossz (m)
+            <input id="proLen" type="number" min="1" step="0.1" placeholder="pl. 10.5" />
+          </label>
+          <label class="field">Szélesség (m)
+            <input id="proWid" type="number" min="1" step="0.1" placeholder="pl. 8.0" />
+          </label>
+          <label class="field">Külső kerület (m) (opcionális)
+            <input id="proPerim" type="number" min="0" step="0.1" placeholder="pl. 36.0" />
+          </label>
+        </div>
+
+        <div class="grid3" style="margin-top:10px;">
+          <label class="field">Tetőforma
+            <select id="roofType">
+              <option value="flat">Lapos tető</option>
+              <option value="gable">Nyeregtető</option>
+              <option value="hip">Sátortető</option>
+            </select>
+          </label>
+          <label class="field">Tető hajlásszög (fok)
+            <input id="roofPitch" type="number" min="0" max="60" step="1" />
+          </label>
+          <label class="field">Ablakfelület (m²) (opcionális)
+            <input id="proWinArea" type="number" min="0" step="0.1" placeholder="pl. 18.0" />
+          </label>
+        </div>
+
+        <div class="muted tiny" style="margin-top:8px;">
+          Megjegyzés: a tetőfelület számítás PRO-ban is becslés (különösen sátortetőnél), de a megadott méreteket és hajlásszöget figyelembe veszi.
+        </div>
+      </details>
 
       <div class="grid2">
         <div class="panel">
