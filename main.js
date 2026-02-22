@@ -4,6 +4,7 @@
    - Tudástár (kereső + kategóriák + cikk nézet)
    - 3D nézet (MVP) = Profi hőtérkép MOST/CÉL/KÜLÖNBSÉG
    - LINKELHETŐ KALKULÁCIÓ (share link): #calc&share=...
+   - ÚJ: Felújítási terv generálása nézet (logikai alap)
 */
 
 (function () {
@@ -78,22 +79,43 @@
     resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // =========================
+  // ÁLLAPOT: utolsó elemzés eredménye (ehhez kötjük a tervet)
+  // =========================
+  let lastCalc = null; // { x, prio, inv, costNow, costTarget, savingYear, savingMonth, calib, improve, techNow, techTarget, pb... }
+
+  function setPlanEnabled(enabled) {
+    const btnPlan = $("btnPlan");
+    // opcionális: ha van külön elem a terv nézetben, amit zárni akarunk
+    const lockEl = $("planLockedNote");
+
+    if (btnPlan) {
+      btnPlan.disabled = !enabled;
+      btnPlan.classList.toggle("isDisabled", !enabled);
+      btnPlan.setAttribute("aria-disabled", String(!enabled));
+      btnPlan.title = enabled ? "" : "Előbb futtasd az Elemzést.";
+    }
+    if (lockEl) lockEl.style.display = enabled ? "none" : "";
+  }
+
   // ---------- NAV (NULL-SAFE!) ----------
   const btnHome = $("btnHome");
   const btnCalc = $("btnCalc");
   const btn3d = $("btn3d");
   const btnDocs = $("btnDocs");
+  const btnPlan = $("btnPlan"); // ÚJ: ha létezik a HTML-ben
 
   const viewHome = $("viewHome");
   const viewCalc = $("viewCalc");
   const view3d = $("view3d");
   const viewDocs = $("viewDocs");
+  const viewPlan = $("viewPlan"); // ÚJ: Felújítási terv nézet
 
   const homeGoCalc = $("homeGoCalc");
   const homeGoDocs = $("homeGoDocs");
 
   function setActive(btn) {
-    [btnHome, btnCalc, btn3d, btnDocs].forEach((b) => b && b.classList.remove("active"));
+    [btnHome, btnCalc, btn3d, btnDocs, btnPlan].forEach((b) => b && b.classList.remove("active"));
     btn && btn.classList.add("active");
   }
 
@@ -102,14 +124,17 @@
     if (viewCalc) viewCalc.style.display = which === "calc" ? "" : "none";
     if (view3d) view3d.style.display = which === "3d" ? "" : "none";
     if (viewDocs) viewDocs.style.display = which === "docs" ? "" : "none";
+    if (viewPlan) viewPlan.style.display = which === "plan" ? "" : "none";
 
     if (which === "home") setActive(btnHome);
     if (which === "calc") setActive(btnCalc);
     if (which === "3d") setActive(btn3d);
     if (which === "docs") setActive(btnDocs);
+    if (which === "plan") setActive(btnPlan);
 
     if (which === "docs") renderDocs();
     if (which === "3d") updateHeatmap();
+    if (which === "plan") renderPlan(); // ÚJ
 
     try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (_) {}
   }
@@ -119,55 +144,21 @@
   if (btn3d) btn3d.addEventListener("click", () => { location.hash = "#3d"; showView("3d"); });
   if (btnDocs) btnDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
 
+  // ÚJ: terv nav gomb (ha van)
+  if (btnPlan) btnPlan.addEventListener("click", () => {
+    // csak elemzés után engedjük
+    if (!lastCalc) {
+      toast("Előbb futtasd az Elemzést a Kalkulátorban.");
+      location.hash = "#calc";
+      showView("calc");
+      return;
+    }
+    location.hash = "#plan";
+    showView("plan");
+  });
+
   if (homeGoCalc) homeGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (homeGoDocs) homeGoDocs.addEventListener("click", () => { location.hash = "#docs"; showView("docs"); });
-
-  // ================================
-  // „← SzakiPiac” gomb a NAV-BAN, a "Kezdő" ELÉ (a piros karikázott helyre)
-  // ================================
-  function addBackToSzakipiacButton() {
-    if (document.getElementById("eaBackToSzakipiac")) return;
-
-    const refBtn =
-      document.getElementById("btnHome") ||
-      document.getElementById("btnCalc") ||
-      document.getElementById("btn3d") ||
-      document.getElementById("btnDocs");
-
-    if (!refBtn) return;
-
-    const navGroup = refBtn.parentElement; // Kezdő / Kalkulátor / stb konténer
-    if (!navGroup) return;
-
-    const a = document.createElement("a");
-    a.id = "eaBackToSzakipiac";
-    a.href = SZAKIPIAC_HOME_URL;
-    a.textContent = "← SzakiPiac";
-
-    // Nav-gomb stílus átvétele
-    a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
-
-    // Ha valamiért üres a class, legyen minimál stílus
-    if (!a.className) {
-      a.style.cssText = `
-        display:inline-flex;
-        align-items:center;
-        padding:10px 16px;
-        border-radius:999px;
-        background:rgba(255,255,255,.08);
-        border:1px solid rgba(255,255,255,.15);
-        color:#eaf2ff;
-        text-decoration:none;
-        font-weight:600;
-        backdrop-filter: blur(6px);
-      `;
-    }
-
-    a.style.whiteSpace = "nowrap";
-
-    // NAV elejére: Kezdő elé
-    navGroup.insertBefore(a, refBtn);
-  }
 
   // ---------- Material lambdas (W/mK) ----------
   const LAMBDA = {
@@ -646,7 +637,7 @@
     const floorCost = areas.Afloor * costs.costFloorM2 * (deltaFloor / 10);
     const heatCost = costs.costHeating;
 
-    return { wallCost, roofCost, floorCost, heatCost };
+    return { wallCost, roofCost, floorCost, heatCost, deltaWall, deltaRoof, deltaFloor };
   }
 
   function renderResult(out) {
@@ -728,10 +719,10 @@
     const saveOnlyHeat = Math.max(0, costNow - costOnlyHeat);
 
     const prio = [
-      { k: "Fűtés", v: saveOnlyHeat },
-      { k: "Födém/padlás", v: saveOnlyRoof },
-      { k: "Fal", v: saveOnlyWall },
-      { k: "Padló/aljzat", v: saveOnlyFloor }
+      { key: "heat",  k: "Fűtés",          v: saveOnlyHeat },
+      { key: "roof",  k: "Födém/padlás",   v: saveOnlyRoof },
+      { key: "wall",  k: "Fal",           v: saveOnlyWall },
+      { key: "floor", k: "Padló/aljzat",  v: saveOnlyFloor }
     ].sort((a, b) => b.v - a.v);
 
     const inv = investmentCosts(
@@ -748,6 +739,24 @@
 
     const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
     const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
+
+    // ====== ÚJ: elmentjük az elemzést a terv nézethez ======
+    lastCalc = {
+      x,
+      prio,
+      inv,
+      costNow,
+      costTarget,
+      savingYear,
+      savingMonth,
+      calib,
+      improve,
+      saveOnly: { roof: saveOnlyRoof, wall: saveOnlyWall, floor: saveOnlyFloor, heat: saveOnlyHeat },
+      paybacks: { roof: pbRoof, wall: pbWall, floor: pbFloor, heat: pbHeat },
+      techNow,
+      techTarget
+    };
+    setPlanEnabled(true);
 
     const html = `
       <div class="sectionTitle">Eredmény</div>
@@ -783,6 +792,9 @@
           <li><b>${prio[2].k}:</b> ~ ${fmtFt(prio[2].v)} / év</li>
           <li><b>${prio[3].k}:</b> ~ ${fmtFt(prio[3].v)} / év</li>
         </ol>
+        <div class="muted" style="margin-top:8px;">
+          Tipp: ha van „Felújítási terv” nézet, most már aktiválható az Elemzés után.
+        </div>
       </div>
 
       <div class="out">
@@ -817,6 +829,8 @@
   if (btnReset) btnReset.addEventListener("click", () => {
     flashBtn(btnReset);
     setDefaults();
+    lastCalc = null;
+    setPlanEnabled(false);
     toast("Alapértékek visszaállítva.");
     renderResult(`
       <div class="sectionTitle">Eredmény</div>
@@ -824,6 +838,168 @@
     `);
     if ((location.hash || "").includes("3d")) updateHeatmap();
   });
+
+  // =========================
+  // ÚJ: FELÚJÍTÁSI TERV NÉZET (logikai alap)
+  // =========================
+  function renderPlan() {
+    const box = $("planBox"); // ajánlott: a HTML-ben legyen egy konténer, de null-safe
+    if (!viewPlan) return;
+
+    // ha nincs elemzés
+    if (!lastCalc) {
+      if (box) {
+        box.innerHTML = `
+          <div class="sectionTitle">Felújítási terv generálása</div>
+          <div class="out">
+            <div class="muted">
+              Előbb futtasd az <b>Elemzést</b> a Kalkulátorban, és utána itt megjelenik a forintosított terv.
+            </div>
+          </div>
+        `;
+      }
+      return;
+    }
+
+    const x = lastCalc.x;
+    const prio = lastCalc.prio || [];
+    const inv = lastCalc.inv || { wallCost:0, roofCost:0, floorCost:0, heatCost:0, deltaWall:0, deltaRoof:0, deltaFloor:0 };
+    const savingYear = lastCalc.savingYear || 0;
+
+    // teljes beruházás (csak ami ténylegesen változik)
+    let totalInvest = 0;
+    const invests = [];
+
+    // födém/fal/padló akkor, ha delta > 0
+    if ((inv.deltaRoof || 0) > 0) { totalInvest += inv.roofCost; invests.push({ key:"roof",  name:"Födém/padlás", cost:inv.roofCost, save:lastCalc.saveOnly?.roof||0, pb:lastCalc.paybacks?.roof }); }
+    if ((inv.deltaWall || 0) > 0) { totalInvest += inv.wallCost; invests.push({ key:"wall",  name:"Fal",         cost:inv.wallCost, save:lastCalc.saveOnly?.wall||0, pb:lastCalc.paybacks?.wall }); }
+    if ((inv.deltaFloor|| 0) > 0) { totalInvest += inv.floorCost; invests.push({ key:"floor", name:"Padló/aljzat", cost:inv.floorCost, save:lastCalc.saveOnly?.floor||0, pb:lastCalc.paybacks?.floor }); }
+
+    // fűtés csak ha csere van (különben ne számoljuk)
+    const heatingChange = (x.heatingTarget !== x.heatingNow) || (x.heatingTarget === "hp" && x.scopTarget !== x.scopNow);
+    if (heatingChange) { totalInvest += inv.heatCost; invests.push({ key:"heat", name:"Fűtés", cost:inv.heatCost, save:lastCalc.saveOnly?.heat||0, pb:lastCalc.paybacks?.heat }); }
+
+    const totalPayback = paybackYears(totalInvest, savingYear);
+
+    // 3–5 lépés: a prioritás listából (mindig sorrend)
+    const steps = prio.slice(0, 5).map(p => {
+      const key = p.key;
+      const mapName = p.k;
+      // hozzárendeljük a költséget + payback-et
+      let cost = 0;
+      let pb = Infinity;
+
+      if (key === "roof") { cost = inv.roofCost; pb = lastCalc.paybacks?.roof; }
+      if (key === "wall") { cost = inv.wallCost; pb = lastCalc.paybacks?.wall; }
+      if (key === "floor"){ cost = inv.floorCost; pb = lastCalc.paybacks?.floor; }
+      if (key === "heat") { cost = inv.heatCost; pb = lastCalc.paybacks?.heat; }
+
+      // ha nincs változás, akkor legyen 0 Ft és “–”
+      const willDo =
+        (key === "roof"  && (inv.deltaRoof||0) > 0) ||
+        (key === "wall"  && (inv.deltaWall||0) > 0) ||
+        (key === "floor" && (inv.deltaFloor||0) > 0) ||
+        (key === "heat"  && heatingChange);
+
+      return {
+        title: mapName,
+        saving: p.v || 0,
+        cost: willDo ? cost : 0,
+        pb: willDo ? pb : Infinity,
+        note: (key === "heat")
+          ? `${HEAT[x.heatingNow].name} → ${HEAT[x.heatingTarget].name}`
+          : (key === "roof")
+            ? `${x.roofInsNow} cm → ${x.roofInsTarget} cm (${x.roofInsMat.toUpperCase()})`
+            : (key === "wall")
+              ? `${x.wallInsNow} cm → ${x.wallInsTarget} cm (${x.wallInsMat.toUpperCase()})`
+              : `${x.floorInsNow} cm → ${x.floorInsTarget} cm (${x.floorInsMat.toUpperCase()})`,
+        willDo
+      };
+    });
+
+    // biztosítsuk: legalább 3 elem legyen (ha valamiért nincs elég)
+    while (steps.length < 3) {
+      steps.push({ title:"(nincs több elem)", saving:0, cost:0, pb:Infinity, note:"–", willDo:false });
+    }
+
+    const stepsHtml = steps.slice(0, 5).map((s, i) => `
+      <div class="out" style="margin-top:10px;">
+        <div class="sectionTitle">${i+1}. lépés — ${s.title}</div>
+        <div style="margin-top:6px;">
+          <div><b>Mit csinálunk:</b> ${s.note}</div>
+          <div><b>Becsült beruházás:</b> ${fmtFt(s.cost)}</div>
+          <div><b>Becsült éves megtakarítás:</b> ${fmtFt(s.saving)} / év</div>
+          <div><b>Becsült megtérülés:</b> ${fmtYears(s.pb)}</div>
+          <div class="muted" style="margin-top:8px;">
+            ${s.willDo ? "Sorrend a megtakarítás alapján." : "Ez a tétel jelenleg nem igényel változtatást a megadott célok szerint."}
+          </div>
+        </div>
+      </div>
+    `).join("");
+
+    const summaryHtml = `
+      <div class="sectionTitle">Felújítási terv generálása</div>
+
+      <div class="out" style="margin-top:10px;">
+        <div class="sectionTitle">Összegzés (forintosítva)</div>
+        <div style="margin-top:6px;">
+          <b>Teljes beruházás:</b> ${fmtFt(totalInvest)}<br/>
+          <b>Teljes éves megtakarítás:</b> ${fmtFt(savingYear)} / év <span class="muted">(~ ${fmtFtShort((savingYear||0)/12)} Ft/hó)</span><br/>
+          <b>Teljes megtérülés:</b> <b>${fmtYears(totalPayback)}</b><br/>
+          <div class="muted" style="margin-top:8px;">
+            A terv a Kalkulátorban kiszámolt prioritás listára és beruházási tételekre épül (Elemzés után).
+          </div>
+        </div>
+      </div>
+    `;
+
+    const leadHtml = `
+      <div class="out" style="margin-top:12px;">
+        <div class="sectionTitle">Ajánlatkérés a terv alapján</div>
+        <div class="muted" style="margin-top:6px;">
+          A következő lépés: kérj ajánlatot a kivitelezőktől a fenti terv szerint.
+        </div>
+        <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+          <button id="btnLeadPlan" class="btnPrimary">Ajánlatkérés</button>
+          <button id="btnPlanCopySummary" class="btnGhost">Összegzés másolása</button>
+        </div>
+      </div>
+    `;
+
+    const allHtml = summaryHtml + stepsHtml + leadHtml;
+
+    if (box) box.innerHTML = allHtml;
+    else viewPlan.innerHTML = allHtml; // ha nincs külön planBox, akkor magába a nézetbe
+
+    // lead gomb
+    const btnLeadPlan = $("btnLeadPlan");
+    if (btnLeadPlan) {
+      btnLeadPlan.addEventListener("click", () => {
+        flashBtn(btnLeadPlan);
+        toast("Vissza a SzakiPiacra…");
+        goToSzakipiacHome();
+      });
+    }
+
+    // összegzés másolása (logikai alap, marketing/leadhez jó)
+    const btnCopy = $("btnPlanCopySummary");
+    if (btnCopy) {
+      btnCopy.addEventListener("click", async () => {
+        flashBtn(btnCopy);
+        const txt = [
+          "Energia Advisor 3D – Felújítási terv (összegzés)",
+          `Teljes beruházás: ${fmtFt(totalInvest)}`,
+          `Éves megtakarítás: ${fmtFt(savingYear)} / év (~ ${fmtFtShort((savingYear||0)/12)} Ft/hó)`,
+          `Megtérülés: ${fmtYears(totalPayback)}`,
+          "",
+          "Lépések:",
+          ...steps.slice(0,5).map((s,i)=> `${i+1}. ${s.title} – költség: ${fmtFt(s.cost)} – megtakarítás: ${fmtFt(s.saving)}/év – megtérülés: ${fmtYears(s.pb)} – ${s.note}`)
+        ].join("\n");
+        const ok = await copyToClipboard(txt);
+        toast(ok ? "Összegzés kimásolva ✅" : "Nem sikerült másolni.");
+      });
+    }
+  }
 
   // ---------- TUDÁSTÁR (TELI + működő kategóriák) ----------
   const DOCS = [
@@ -1216,7 +1392,7 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
   // ---------- initByHash (share betöltéssel) ----------
   function initByHash() {
     const { view } = parseHash();
-    const onlyCalcExists = !!viewCalc && !viewHome && !view3d && !viewDocs;
+    const onlyCalcExists = !!viewCalc && !viewHome && !view3d && !viewDocs && !viewPlan;
 
     if (onlyCalcExists) {
       showView("calc");
@@ -1231,6 +1407,17 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
     }
     if (view === "3d") return showView("3d");
     if (view === "docs") return showView("docs");
+
+    // ÚJ: #plan
+    if (view === "plan") {
+      if (!lastCalc) {
+        showView("calc");
+        toast("A tervhez előbb kell egy Elemzés.");
+        return;
+      }
+      return showView("plan");
+    }
+
     return showView("home");
   }
 
@@ -1239,15 +1426,12 @@ A kalkulátorban a légcserét (1/h) emelve rögtön látod, mennyire befolyáso
   bindShareButton();
   bindStateButtons();   // ✅ Mentés/Betöltés/Törlés
   bindPdfButtons();     // ✅ PDF (print)
+
+  // terv kezdetben tiltva (csak Elemzés után)
+  setPlanEnabled(false);
+
   initByHash();
   window.addEventListener("hashchange", initByHash);
-
-  // ✅ felső „← SzakiPiac” gomb a Kezdő elé
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", addBackToSzakipiacButton);
-  } else {
-    addBackToSzakipiacButton();
-  }
 
   // ===== SZAKIPIAC LEAD (AJÁNLATKÉRÉS) – MOST MINDIG VISSZA A FŐOLDALRA =====
   (function bindLeadButton(){
