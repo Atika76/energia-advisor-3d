@@ -25,8 +25,8 @@
       <button id="btn3d" class="navBtn">3D nézet</button>
       <button id="btnDocs" class="navBtn">Tudástár</button>
 
-      <!-- PRO gomb (1 db, kérés szerint) -->
-      <button id="btnPro" class="navBtn" type="button" title="PRO mód: geometria + tetőforma">PRO</button>
+      <!-- PRO gomb: 1 db, zöldre vált ha ON -->
+      <button id="btnPro" class="navBtn" title="PRO: geometria + tetőforma + extra pontosság">PRO OFF</button>
     </nav>
   </header>
 
@@ -75,67 +75,22 @@
         <div>
           <div class="sectionTitle">Energia kalkulátor (Jelenlegi → Cél)</div>
           <div class="muted">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</div>
-          <div id="proBadge" class="muted tiny" style="display:none;margin-top:6px;"><b>PRO ON</b> • Geometria + tetőforma aktív</div>
+          <div id="proInlineNote" class="muted tiny" style="margin-top:6px; display:none;">
+            <b>PRO ON:</b> Geometria + tetőforma aktív. Részletek: PRO fül.
+          </div>
         </div>
 
         <div class="headBtns">
-          <!-- Böngészős mentés -->
           <button id="btnSaveState" class="btn ghost">💾 Mentés</button>
           <button id="btnLoadState" class="btn ghost">📥 Betöltés</button>
           <button id="btnClearState" class="btn ghost">🧹 Törlés</button>
 
-          <!-- FÁJLOS export/import -->
           <button id="btnExportState" class="btn ghost">⬇️ Export</button>
           <button id="btnImportState" class="btn ghost">⬆️ Import</button>
 
           <button id="btnExportPDF" class="btn primary">🖨️ PDF</button>
         </div>
       </div>
-
-      <!-- PRO állapot rejtett input (hogy menthető legyen) -->
-      <input id="proOn" type="hidden" value="0" />
-
-      <!-- PRO mezők (csak ha PRO ON) -->
-      <details id="proFields" class="details" style="display:none; margin: 10px 0 14px;">
-        <summary>▶ PRO: Geometria + tetőforma (tényleges méretek)</summary>
-
-        <div class="muted tiny" style="margin-top:8px;">
-          Tipp: ha megadod a <b>hossz + szélesség</b> értéket, abból számolunk alapterületet és kerületet.
-          Ha ez nincs, megadhatsz csak <b>külső kerületet</b> is (m). A tetőfelület a tetőformából + hajlásszögből becsül.
-        </div>
-
-        <div class="grid3" style="margin-top:10px;">
-          <label class="field">Hossz (m)
-            <input id="proLen" type="number" min="1" step="0.1" placeholder="pl. 10.5" />
-          </label>
-          <label class="field">Szélesség (m)
-            <input id="proWid" type="number" min="1" step="0.1" placeholder="pl. 8.0" />
-          </label>
-          <label class="field">Külső kerület (m) (opcionális)
-            <input id="proPerim" type="number" min="0" step="0.1" placeholder="pl. 36.0" />
-          </label>
-        </div>
-
-        <div class="grid3" style="margin-top:10px;">
-          <label class="field">Tetőforma
-            <select id="roofType">
-              <option value="flat">Lapos tető</option>
-              <option value="gable">Nyeregtető</option>
-              <option value="hip">Sátortető</option>
-            </select>
-          </label>
-          <label class="field">Tető hajlásszög (fok)
-            <input id="roofPitch" type="number" min="0" max="60" step="1" />
-          </label>
-          <label class="field">Ablakfelület (m²) (opcionális)
-            <input id="proWinArea" type="number" min="0" step="0.1" placeholder="pl. 18.0" />
-          </label>
-        </div>
-
-        <div class="muted tiny" style="margin-top:8px;">
-          Megjegyzés: a tetőfelület számítás PRO-ban is becslés (különösen sátortetőnél), de a megadott méreteket és hajlásszöget figyelembe veszi.
-        </div>
-      </details>
 
       <div class="grid2">
         <div class="panel">
@@ -301,7 +256,7 @@
           </div>
 
           <div class="muted tiny">
-            Fontos: a MOST költséget (Ft/év) te adod meg — ezt tekintjük “valós” bázisnak. A modell ebből számolja vissza a MOST hőigényt, majd ugyanazzal a kalibrációval számolja a CÉL hőigényt.
+            Fontos: a MOST költséget (Ft/év) te adod meg — ezt tekintjük “valós” bázisnak.
           </div>
         </div>
       </div>
@@ -309,6 +264,109 @@
       <div id="resultBox" class="result">
         <div class="sectionTitle">Eredmény</div>
         <div class="muted">Kattints az <b>Elemzés</b> gombra.</div>
+      </div>
+    </section>
+
+    <!-- PRO -->
+    <section id="viewPro" class="card" style="display:none;">
+      <div class="sectionHead">
+        <div>
+          <div class="sectionTitle">PRO mód: Geometria + tetőforma + pontosság</div>
+          <div class="muted">PRO ON esetén a kalkulátor a megadott méretekből számol (alapterület, kerület, tetőfelület, ablak m²).</div>
+        </div>
+        <div class="headBtns">
+          <button id="btnProGoCalc" class="btn ghost">↩︎ Vissza a kalkulátorhoz</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panelTitle">1) Valódi geometria</div>
+
+        <div class="grid3">
+          <label class="field">Hossz (m)
+            <input id="proLen" type="number" min="1" max="100" step="0.1" />
+          </label>
+          <label class="field">Szélesség (m)
+            <input id="proWid" type="number" min="1" max="100" step="0.1" />
+          </label>
+          <label class="field">Külső kerület (m) – opcionális
+            <input id="proPerim" type="number" min="0" max="400" step="0.1" />
+          </label>
+        </div>
+
+        <div class="grid3">
+          <label class="field">Tetőforma
+            <select id="proRoofType">
+              <option value="flat">Lapos tető</option>
+              <option value="gable">Nyeregtető</option>
+              <option value="hip">Sátortető</option>
+            </select>
+          </label>
+          <label class="field">Tető hajlásszög (fok)
+            <input id="proPitch" type="number" min="0" max="60" step="1" />
+          </label>
+          <label class="field">Eresz túlnyúlás (m) – opcionális
+            <input id="proEaves" type="number" min="0" max="2" step="0.05" />
+          </label>
+        </div>
+
+        <div class="tiny muted">
+          Tipp: ha megadod a hossz + szélességet, abból számoljuk az alapterületet és (ha nincs megadva külső kerület) a kerületet is.
+          A tetőfelületet a tetőforma + hajlásszög alapján becsüljük.
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <div class="panelTitle">2) Ablak külön kezelése</div>
+
+        <div class="grid3">
+          <label class="field">Ablakfelület (m²) – opcionális
+            <input id="proWinArea" type="number" min="0" max="200" step="0.1" />
+          </label>
+          <label class="field">Ablak U CÉL (W/m²K) – opcionális
+            <input id="proWinUTarget" type="number" min="0.6" max="3.0" step="0.1" />
+          </label>
+          <label class="field">Ablak csere költség (Ft) – opcionális
+            <input id="proWinCost" type="number" min="0" step="50000" />
+          </label>
+        </div>
+
+        <div class="tiny muted">
+          Ha itt m²-t adsz meg, az felülírja a “% ablakarány” becslést PRO módban.
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <div class="panelTitle">3) Automatikus hőhíd javaslat (realitás)</div>
+
+        <div class="grid3">
+          <label class="field">Építési év (opcionális)
+            <input id="proYear" type="number" min="1900" max="2026" step="1" />
+          </label>
+          <label class="field" style="display:flex; gap:10px; align-items:center;">
+            <input id="proAutoBridge" type="checkbox" />
+            <span>Hőhíd % automatikus beállítás (javaslat alapján)</span>
+          </label>
+          <div class="field">
+            <div class="tiny muted">Javasolt hőhíd: <b><span id="proBridgeHint">–</span>%</b></div>
+          </div>
+        </div>
+
+        <div class="tiny muted">
+          Ez csak “józan” közelítés: régi házaknál több csomóponti hiba → nagyobb korrekció.
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:14px;">
+        <div class="panelTitle">4) Szenzitivitás (bizalomnövelő)</div>
+        <div class="muted tiny">Megmutatja, mennyire érzékeny a megtakarítás az energiaárra és a SCOP-ra (±20%).</div>
+        <div id="proSensitivity" class="out" style="margin-top:10px;">–</div>
+      </div>
+
+      <div class="out" style="margin-top:14px;">
+        <div class="muted">
+          PRO tipp: ha kész, menj vissza a Kalkulátorba és nyomj <b>Elemzés</b>-t – a PRO geometria automatikusan be fog számolni.
+        </div>
       </div>
     </section>
 
@@ -378,7 +436,6 @@
 
           <div class="muted" style="margin-top:10px;">
             A színezés az egyes elemek <b>H (W/K) hozzájárulásán</b> alapul (UA + Hvent), hőhíd-korrekcióval.
-            <br/>PRO: a színek döntéstámogatásra vannak “kontrasztolva” (hőkamerás skála).
           </div>
 
           <div class="miniCard" style="margin-top:14px;">
@@ -433,7 +490,6 @@
     </div>
   </main>
 
-  <!-- Import fájlválasztó (rejtett) -->
   <input id="eaImportFile" type="file" accept="application/json" style="display:none" />
 
   <script src="main.js"></script>
