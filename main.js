@@ -1426,7 +1426,24 @@
     { id:"cond_boiler", cat:"Fűtés", read:"~3 perc", tags:["kondenz","kazán","hatásfok"], title:"Kondenzációs kazán: mikor hoz látványos javulást?", body:`Régi kazánhoz képest a kondenzációs kazán hatásfoka jobb, főleg alacsonyabb előremenő hőmérsékleten.`.trim() },
     { id:"thermal_bridges", cat:"Tipikus hibák", read:"~4 perc", tags:["hőhíd","csomópont","penész"], title:"Hőhidak: miért lehet penész akkor is, ha szigeteltél?", body:`A hőhíd olyan pont, ahol a hő “könnyebben” távozik (koszorú, áthidaló, lábazat, csatlakozások).`.trim() },
     { id:"air_sealing_mistake", cat:"Tipikus hibák", read:"~3 perc", tags:["légzárás","huzat","szalag"], title:"Tipikus hiba: szigetelés van, de a ház továbbra is “huzatos”", body:`Szigetelés mellett is elmehet a hő, ha nincs légzárás: rossz ablakbeépítés, rések, padlásfeljáró.`.trim() },
-    { id:"questions_for_contractor", cat:"Kérdéslista", read:"~5 perc", tags:["kivitelező","kérdések","minőség"], title:"10 kérdés kivitelezőnek, hogy ne bukj a részleteken", body:`1) Milyen csomóponti megoldást adsz koszorúnál/lábazatnál?<br/>2) Mivel ragasztasz, dűbelezés hogyan lesz?<br/>...`.trim() }
+
+    // ✅ JAVÍTVA: tényleg 10 kérdés
+    { id:"questions_for_contractor", cat:"Kérdéslista", read:"~5 perc", tags:["kivitelező","kérdések","minőség"], title:"10 kérdés kivitelezőnek, hogy ne bukj a részleteken", body:`
+<b>Ha ezt a 10 kérdést felteszed, nagyon gyorsan kiderül, ki a profi és ki az, aki csak „rábeszél”.</b><br/><br/>
+
+1) <b>Koszorú / lábazat / nyílásáthidalók:</b> milyen csomóponti megoldást adsz, hogy ne legyen hőhíd és repedés?<br/>
+2) <b>Ragasztás:</b> milyen ragasztót használsz (márka/típus), és milyen módon lesz felhordva (perem+pont / fogazott)?<br/>
+3) <b>Dűbelezés:</b> hány db/m², milyen dűbel, mikor dűbelezel (ragasztás után mennyi idővel), és hova kerülnek a dűbelek?<br/>
+4) <b>Hálózás:</b> milyen üvegszövet háló (g/m²), milyen átfedéssel, és lesz-e dupla háló a kritikus részeken?<br/>
+5) <b>Élek és sarkok:</b> milyen élvédőt és erősítést használsz (sarokerősítés, átlós erősítés ablaknál)?<br/>
+6) <b>Lábazat:</b> milyen anyag kerül lábazatra (XPS/EPS?), meddig megy le a szigetelés, és hogyan lesz víz ellen védve?<br/>
+7) <b>Indítóprofil / vízorros kialakítás:</b> lesz-e indítóprofil, és hogyan oldod meg a víz levezetését (cseppentő, élképzés)?<br/>
+8) <b>Nyílászáró csatlakozás:</b> milyen szalaggal/tömítéssel dolgozol, és hogyan lesz kialakítva a párkány + könyöklő (ne ázzon be)?<br/>
+9) <b>Rétegrend és anyagok listája:</b> írásban adod-e a teljes anyaglistát (márka, típus, mennyiség), és mi van az árajánlatban pontosan benne?<br/>
+10) <b>Garancia + ellenőrzés:</b> mire vállalsz garanciát, mennyi ideig, és milyen fotókkal/átadás-átvétellel igazolod a rejtett munkákat?<br/><br/>
+
+<b>Tipp:</b> kérd el előre a részletes rétegrendet és anyaglistát. Aki ezen „sértődik”, az általában nem a részletek embere.
+`.trim() }
   ];
 
   let docFilterCat = "Összes";
