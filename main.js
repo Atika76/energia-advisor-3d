@@ -6,7 +6,6 @@
    - LINKELHETŐ KALKULÁCIÓ (share link): #calc&share=...
    - FELÚJÍTÁSI TERV nézet (#plan) elemzés után
    - Export/Import JSON fájlba (letöltés/fájlválasztó)
-   - PRO gomb + PRO mód (localStorage) + 3D "Top nyereség" tartalom
 */
 
 (function () {
@@ -82,136 +81,6 @@
   }
 
   // ==============================
-  // PRO mód (localStorage) + modal
-  // ==============================
-  const PRO_KEY = "ea3d_pro_v1";
-  let EA_PRO = (localStorage.getItem(PRO_KEY) === "1");
-
-  const btnPro = $("btnPro");
-
-  function setPro(on) {
-    EA_PRO = !!on;
-    try { localStorage.setItem(PRO_KEY, EA_PRO ? "1" : "0"); } catch (_) {}
-    document.body.classList.toggle("eaProOn", EA_PRO);
-    updateProUi();
-    // 3D tartalom friss
-    if ((location.hash || "").includes("3d")) updateHeatmap();
-  }
-
-  function updateProUi() {
-    if (!btnPro) return;
-    btnPro.textContent = EA_PRO ? "PRO ✓" : "PRO";
-    btnPro.title = EA_PRO ? "PRO aktív (katt = PRO menü)" : "PRO funkciók (katt)";
-  }
-
-  function ensureProModal() {
-    if (document.getElementById("eaProModal")) return;
-
-    const wrap = document.createElement("div");
-    wrap.id = "eaProModal";
-    wrap.style.cssText = `
-      position: fixed; inset: 0;
-      display: none;
-      align-items: center; justify-content: center;
-      background: rgba(0,0,0,.55);
-      z-index: 9998;
-      padding: 16px;
-    `;
-
-    wrap.innerHTML = `
-      <div style="
-        width: min(560px, 100%);
-        background: rgba(12,18,34,.96);
-        border: 1px solid rgba(255,255,255,.14);
-        border-radius: 16px;
-        box-shadow: 0 18px 60px rgba(0,0,0,.55);
-        color: #eaf2ff;
-        overflow: hidden;
-      ">
-        <div style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.10); display:flex; align-items:center; gap:10px;">
-          <div style="font-weight:800; letter-spacing:.3px;">Energia Advisor – PRO</div>
-          <div style="margin-left:auto; opacity:.85; font-weight:700;">${EA_PRO ? "Aktív ✓" : "Inaktív"}</div>
-        </div>
-
-        <div style="padding: 16px;">
-          <div style="font-weight:700; margin-bottom:8px;">Mit ad a PRO ebben az MVP-ben?</div>
-          <ul style="margin: 0 0 12px 18px; line-height: 1.45;">
-            <li><b>3D nézet:</b> “Top nyereség” – megmutatja, mely elem hozza a legnagyobb veszteség-csökkenést.</li>
-            <li><b>Gyors döntéstámogatás:</b> a különbség nézetből rangsorolt bontás.</li>
-            <li><b>Megmarad a böngészőben:</b> aktiválás localStorage-be mentve.</li>
-          </ul>
-
-          <div style="display:flex; flex-wrap: wrap; gap:10px; margin-top: 12px;">
-            <button id="eaProToggle" class="btn primary" style="flex:1; min-width: 160px;">
-              ${EA_PRO ? "PRO kikapcsolása" : "PRO aktiválása (demo)"}
-            </button>
-            <button id="eaProBuy" class="btn ghost" style="flex:1; min-width: 160px;">
-              Vásárlás / infó (SzakiPiac)
-            </button>
-            <button id="eaProClose" class="btn ghost" style="flex:0; min-width: 120px;">
-              Bezár
-            </button>
-          </div>
-
-          <div class="muted" style="margin-top:10px; opacity:.85;">
-            Megjegyzés: ez egy “MVP PRO kapcsoló”. Ha később fizetés kell, ugyanide kötjük be.
-          </div>
-        </div>
-      </div>
-    `;
-
-    wrap.addEventListener("click", (e) => {
-      if (e.target === wrap) hideProModal();
-    });
-
-    document.body.appendChild(wrap);
-
-    const btnToggle = document.getElementById("eaProToggle");
-    const btnBuy = document.getElementById("eaProBuy");
-    const btnClose = document.getElementById("eaProClose");
-
-    btnToggle?.addEventListener("click", () => {
-      setPro(!EA_PRO);
-      toast(EA_PRO ? "PRO aktiválva ✅" : "PRO kikapcsolva.");
-      // frissítsük a modal header/state szövegét: egyszerűen zárjuk és újranyitáskor friss
-      hideProModal();
-    });
-
-    btnBuy?.addEventListener("click", () => {
-      flashBtn(btnBuy);
-      toast("Vissza a SzakiPiacra…");
-      goToSzakipiacHome();
-    });
-
-    btnClose?.addEventListener("click", () => hideProModal());
-  }
-
-  function showProModal() {
-    ensureProModal();
-    const el = document.getElementById("eaProModal");
-    if (!el) return;
-    // frissítsük a modal tartalmát egy gyors rebuilddel (state felirat miatt)
-    el.remove();
-    ensureProModal();
-    const el2 = document.getElementById("eaProModal");
-    if (!el2) return;
-    el2.style.display = "flex";
-  }
-
-  function hideProModal() {
-    const el = document.getElementById("eaProModal");
-    if (!el) return;
-    el.style.display = "none";
-  }
-
-  if (btnPro) {
-    btnPro.addEventListener("click", () => {
-      flashBtn(btnPro);
-      showProModal();
-    });
-  }
-
-  // ==============================
   // NAV + NÉZETEK
   // ==============================
   const btnHome = $("btnHome");
@@ -257,6 +126,7 @@
   if (btnHome) btnHome.addEventListener("click", () => { location.hash = "#home"; showView("home"); });
   if (btnCalc) btnCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
   if (btnPlan) btnPlan.addEventListener("click", () => {
+    // ha még nincs elemzés, ne engedjük
     if (!EA_PLAN_UNLOCKED) {
       toast("Előbb futtasd az Elemzést a Kalkulátorban.");
       return;
@@ -293,6 +163,7 @@
     a.href = SZAKIPIAC_HOME_URL;
     a.textContent = "← SzakiPiac";
 
+    // Nav-gomb stílus átvétele
     a.className = (refBtn.className || "").replace(/\bactive\b/g, "").trim();
 
     if (!a.className) {
@@ -687,7 +558,7 @@
           const state = JSON.parse(raw);
           applyState(state);
           toast("Betöltve ✅");
-          calcAll();
+          calcAll(); // frissítünk mindent + feloldjuk a tervet
           if ((location.hash || "").includes("3d")) updateHeatmap();
         }catch(e){
           console.error(e);
@@ -721,6 +592,7 @@
       version: EXPORT_VERSION,
       createdAt: new Date().toISOString(),
       state: serializeState(),
+      // mentjük az utolsó elemzést is, hogy a terv azonnal meglegyen
       lastAnalysis: EA_LAST || null
     };
   }
@@ -765,7 +637,7 @@
     if (btnImport && fileInput){
       btnImport.addEventListener("click", () => {
         flashBtn(btnImport);
-        fileInput.value = "";
+        fileInput.value = ""; // ugyanazt a fájlt is engedje újra
         fileInput.click();
       });
 
@@ -777,6 +649,7 @@
           const text = await f.text();
           const payload = JSON.parse(text);
 
+          // Minimális ellenőrzés
           if (!payload || typeof payload !== "object" || !payload.state){
             toast("Hibás JSON fájl.");
             return;
@@ -784,16 +657,19 @@
 
           applyState(payload.state);
 
+          // ha mentve volt elemzés, visszatöltjük – különben újraszámoljuk
           if (payload.lastAnalysis && typeof payload.lastAnalysis === "object"){
             EA_LAST = payload.lastAnalysis;
             setPlanUnlocked(true);
             toast("Import kész ✅ (állapot + terv)");
+            // eredmény kirajzolása: biztonság kedvéért újraszámolunk is
             calcAll();
           } else {
             toast("Import kész ✅ (állapot)");
-            calcAll();
+            calcAll(); // számoljuk újra -> terv is lesz
           }
 
+          // ha épp 3D-ben vagyunk frissüljön
           if ((location.hash || "").includes("3d")) updateHeatmap();
         }catch(e){
           console.error(e);
@@ -896,8 +772,8 @@
   }
 
   // ====== Felújítási terv állapot ======
-  let EA_LAST = null;
-  let EA_PLAN_UNLOCKED = false;
+  let EA_LAST = null;            // utolsó elemzés összefoglalója
+  let EA_PLAN_UNLOCKED = false;  // terv gomb aktív-e
 
   function setPlanUnlocked(on){
     EA_PLAN_UNLOCKED = !!on;
@@ -992,6 +868,7 @@
       </div>
     `;
 
+    // terv alatti gomb
     const btnLeadPlan = $("btnLeadPlan");
     if (btnLeadPlan){
       btnLeadPlan.addEventListener("click", () => {
@@ -1098,11 +975,13 @@
     const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
     const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
 
+    // mentjük a tervhez szükséges minimumot
     EA_LAST = {
       savingYear,
       prio,
       inv,
       heatingChanged,
+      // map a terv lépésekhez
       invMap: {
         "Födém/padlás": inv.roofCost,
         "Fal": inv.wallCost,
@@ -1175,6 +1054,7 @@
 
     renderResult(html);
 
+    // ha terv nézeten vagyunk, frissítsük rögtön
     if ((location.hash || "").includes("plan")) renderPlan();
     if ((location.hash || "").includes("3d")) updateHeatmap();
   }
@@ -1200,7 +1080,7 @@
     if ((location.hash || "").includes("plan")) renderPlan();
   });
 
-  // ---------- TUDÁSTÁR ----------
+  // ---------- TUDÁSTÁR (ugyanaz, mint nálad) ----------
   const DOCS = [
     { id:"hdd", cat:"Alapok", read:"~3 perc", tags:["HDD","fűtés","alapok"], title:"Mi az a HDD (fűtési foknap) és miért számít?", body:`A HDD (Heating Degree Days) azt mutatja meg, mennyire volt hideg egy évben/idényben egy adott helyen.<br/><br/><b>Magyar irányszám:</b> ~3000 (településtől függ). A kalkulátor azért kéri, hogy országos átlaggal is lehessen becsülni.<br/><br/><b>Gyakorlat:</b> ha ugyanaz a ház hidegebb környéken van, a MOST költség magasabb → a megtakarítás forintban is magasabb lehet.`.trim() },
     { id:"uvalue", cat:"Alapok", read:"~4 perc", tags:["U-érték","hőveszteség","fal"], title:"U-érték egyszerűen: mit jelent és mitől lesz jobb?", body:`Az <b>U-érték</b> (W/m²K) megmutatja, mennyi hő “szökik át” 1 m² szerkezeten 1°C különbségnél.<br/><br/><b>Kisebb U = jobb.</b> Szigetelésnél általában a fal/födém U-értéke csökken látványosan.<br/><br/>A kalkulátor “régi” tipikus U-ból indul, és a megadott cm + anyag alapján számolja a javulást.`.trim() },
@@ -1456,31 +1336,6 @@
 
     const ex = $("hmExplain");
     if (ex) ex.textContent = explain;
-
-    // ===== PRO: Top nyereség kitöltés (MOST->CÉL delta alapján) =====
-    const top = $("hmTopGain");
-    if (top) {
-      if (!EA_PRO) {
-        top.innerHTML = `PRO funkció: aktiváld a felső <b>PRO</b> gombbal, és megmutatom, mi hozza a legtöbbet.`;
-      } else {
-        const delta = keys.map(k => ({
-          k,
-          label: labelMap[k],
-          d: Math.max(0, (partsNow[k]||0) - (partsTar[k]||0))
-        })).sort((a,b)=> b.d - a.d);
-
-        const best = delta.slice(0, 3);
-        const sum = delta.reduce((s,x)=> s + x.d, 0) || 1;
-
-        top.innerHTML = `
-          <div style="margin-bottom:6px;"><b>Top 3 csökkenés (W/K)</b> – MOST → CÉL</div>
-          <ol style="margin:0 0 0 18px; line-height:1.45;">
-            ${best.map(x => `<li><b>${x.label}:</b> ${x.d.toFixed(0)} W/K <span class="muted">(${fmtPct((x.d/sum)*100)})</span></li>`).join("")}
-          </ol>
-          <div class="muted" style="margin-top:8px;">Tipp: nézd a <b>KÜLÖNBSÉG</b> módot a hőtérképnél – ugyanazt az “impact” logikát látod.</div>
-        `;
-      }
-    }
   }
 
   // ---------- initByHash (share betöltéssel) ----------
@@ -1517,14 +1372,10 @@
   setDefaults();
   setPlanUnlocked(false);
 
-  // PRO UI init
-  updateProUi();
-  document.body.classList.toggle("eaProOn", EA_PRO);
-
   bindShareButton();
-  bindStateButtons();
-  bindExportImportButtons();
-  bindPdfButtons();
+  bindStateButtons();        // Mentés/Betöltés/Törlés (böngésző)
+  bindExportImportButtons(); // Export/Import (fájl)
+  bindPdfButtons();          // PDF
 
   initByHash();
   window.addEventListener("hashchange", initByHash);
