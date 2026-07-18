@@ -1032,7 +1032,19 @@
 
     const totalSave = L.savingYear || 0;
     const totalPb = paybackYears(totalInv, totalSave);
-    const steps = (L.prio || []).slice(0, 5);
+    // A kivitelezési sorrend nem azonos a legnagyobb önálló Ft/év megtakarítás
+    // sorrendjével. Előbb a burok javításai következnek (rövidebb becsült
+    // megtérüléssel kezdve), a fűtési rendszer méretezése/cseréje pedig utánuk.
+    const candidates = (L.prio || []).filter(s => (s.v || 0) > 0 && (L.invMap?.[s.k] || 0) > 0);
+    const envelopeSteps = candidates
+      .filter(s => s.k !== "Fűtés")
+      .sort((a, b) => {
+        const aPb = paybackYears(L.invMap[a.k], a.v);
+        const bPb = paybackYears(L.invMap[b.k], b.v);
+        return aPb - bPb || b.v - a.v;
+      });
+    const heatingStep = candidates.filter(s => s.k === "Fűtés");
+    const steps = [...envelopeSteps, ...heatingStep].slice(0, 5);
 
     const lines = steps.map((s, i) => {
       const invest = (L.invMap && L.invMap[s.k]) ? L.invMap[s.k] : 0;
@@ -1041,7 +1053,8 @@
         <div class="out" style="margin-top:12px;">
           <div class="sectionTitle">${i+1}. ${s.k}</div>
           <div style="margin-top:8px;">
-            <b>Várható megtakarítás:</b> ~ ${fmtFt(s.v)} / év <span class="muted">(~ ${fmtFtShort((s.v||0)/12)} Ft/hó)</span><br/>
+            <b>Önálló intézkedés becsült megtakarítása:</b> ~ ${fmtFt(s.v)} / év <span class="muted">(~ ${fmtFtShort((s.v||0)/12)} Ft/hó)</span><br/>
+            <span class="muted">Tájékoztató sáv: ${fmtFt((s.v || 0) * 0.85)} – ${fmtFt((s.v || 0) * 1.15)} / év</span><br/>
             <b>Becsült beruházás:</b> ${fmtFt(invest)}<br/>
             <b>Megtérülés (irány):</b> ${fmtYears(pb)}<br/>
             <div class="muted" style="margin-top:6px;">${planStepHint(s.k)}</div>
@@ -1056,6 +1069,7 @@
         <div style="margin-top:8px;">
           <b>Teljes beruházás:</b> ${fmtFt(totalInv)}<br/>
           <b>Teljes éves megtakarítás:</b> ${fmtFt(totalSave)} / év <span class="muted">(~ ${fmtFtShort(totalSave/12)} Ft/hó)</span><br/>
+          <span class="muted">Becsült sáv: ${fmtFt(L.savingLow ?? totalSave * 0.85)} – ${fmtFt(L.savingHigh ?? totalSave * 1.15)} / év</span><br/>
           <b>Teljes megtérülés:</b> ${fmtYears(totalPb)}
         </div>
       </div>
@@ -1063,7 +1077,7 @@
       <div class="out" style="margin-top:12px;">
         <div class="sectionTitle">3–5 lépéses felújítási terv</div>
         <div class="muted" style="margin-top:6px;">
-          A sorrend a várható <b>Ft/év megtakarítás</b> alapján van.
+          A burokjavítások sorrendje a becsült megtérülést követi; a fűtés méretezése és esetleges cseréje a burok korszerűsítése után következik. A végleges sorrendet helyszíni felmérés alapján szakember hagyja jóvá.
         </div>
       </div>
 
@@ -1265,6 +1279,8 @@
 
     EA_LAST = {
       savingYear,
+      savingLow,
+      savingHigh,
       prio,
       inv: { ...inv, winCost },
       heatingChanged,
@@ -1652,13 +1668,13 @@
 
     if (hmMode === "now") {
       parts = partsNow;
-      explain = "MOST: megmutatja, hogy a jelenlegi állapotban hol megy el a hő arányosan.";
+      explain = "MOST: a megadott adatokból becsült jelenlegi hőveszteség arányait mutatja. Ez nem hőkamerás mérés.";
     } else if (hmMode === "target") {
       parts = partsTar;
-      explain = "CÉL: megmutatja, hogy a cél állapotban hol marad veszteség.";
+      explain = "CÉL: a tervezett állapotban megmaradó, számított hőveszteség arányait mutatja.";
     } else {
       keys.forEach(k => parts[k] = Math.max(0, partsNow[k] - partsTar[k]));
-      explain = "KÜLÖNBSÉG: azt mutatja, hol csökken a legjobban a veszteség.";
+      explain = "KÜLÖNBSÉG: az egyes elemek számított veszteségcsökkenését mutatja. A 0 W/K itt azt jelenti, hogy az adott elem beállítása nem változott, nem azt, hogy nincs hővesztesége.";
     }
 
     const maxPart = keys.reduce((m,k)=> Math.max(m, parts[k]||0), 0) || 1;
