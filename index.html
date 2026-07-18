@@ -177,7 +177,7 @@
           </label>
 
           <label class="field">Éves fűtési költség MOST (Ft/év)
-            <input id="annualCostNow" type="number" min="0" step="1000" />
+            <input id="annualCostNow" type="text" inputmode="numeric" autocomplete="off" placeholder="pl. 500 000 vagy 500.000" />
           </label>
 
           <div class="tiny muted">
@@ -241,18 +241,18 @@
 
             <div class="grid3">
               <label class="field">Fal komplett célrendszer (nettó Ft/m²)
-                <input id="costWallM2" type="number" min="0" step="500" />
+                <input id="costWallM2" type="text" inputmode="numeric" autocomplete="off" />
               </label>
               <label class="field">Födém komplett kivitelezés (nettó Ft/m²)
-                <input id="costRoofM2" type="number" min="0" step="500" />
+                <input id="costRoofM2" type="text" inputmode="numeric" autocomplete="off" />
               </label>
               <label class="field">Padló komplett kivitelezés (nettó Ft/m²)
-                <input id="costFloorM2" type="number" min="0" step="500" />
+                <input id="costFloorM2" type="text" inputmode="numeric" autocomplete="off" />
               </label>
             </div>
 
             <label class="field">Fűtéscsere (Ft)
-              <input id="costHeating" type="number" min="0" step="50000" />
+              <input id="costHeating" type="text" inputmode="numeric" autocomplete="off" />
             </label>
           </details>
           <div id="referencePriceNote" class="muted tiny">A beruházási árak nettó tájékoztató értékek; a falár a SzakiPiac referencia-adatbázisából frissül.</div>
@@ -336,7 +336,7 @@
             <input id="proWinUTarget" type="number" min="0.6" max="3.0" step="0.1" />
           </label>
           <label class="field">Ablak csere költség (Ft) – opcionális
-            <input id="proWinCost" type="number" min="0" step="50000" />
+            <input id="proWinCost" type="text" inputmode="numeric" autocomplete="off" />
           </label>
         </div>
 

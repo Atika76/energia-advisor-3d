@@ -25,6 +25,22 @@
     return Number.isFinite(x) ? x : fallback;
   };
 
+  // Pénzmezők magyar formátumának kezelése:
+  // 500000, 500 000 és 500.000 egyaránt 500 000 Ft.
+  const moneyNum = (v, fallback = 0) => {
+    if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
+    let raw = String(v ?? "").trim().replace(/\u00a0/g, "").replace(/\s+/g, "");
+    if (!raw) return fallback;
+    raw = raw.replace(/[^0-9,.-]/g, "");
+    if (/^-?\d{1,3}(?:[.,]\d{3})+$/.test(raw)) {
+      raw = raw.replace(/[.,]/g, "");
+    } else if (raw.includes(",") && !raw.includes(".")) {
+      raw = raw.replace(",", ".");
+    }
+    const x = Number(raw);
+    return Number.isFinite(x) ? x : fallback;
+  };
+
   function fmtFt(v) {
     const n = Math.round(v);
     return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " Ft";
@@ -287,7 +303,7 @@
 
     const proWinArea = clamp(num(val("proWinArea", 0), 0), 0, 200);
     const proWinUTarget = clamp(num(val("proWinUTarget", 0), 0), 0, 3);
-    const proWinCost = Math.max(0, num(val("proWinCost", 0), 0));
+    const proWinCost = Math.max(0, moneyNum(val("proWinCost", 0), 0));
 
     const proYear = clamp(num(val("proYear", 0), 0), 0, 2026);
     const proAutoBridge = !!($("proAutoBridge") && $("proAutoBridge").checked);
@@ -916,7 +932,7 @@
 
     const heatingNow = val("heatingNow", "gas_old");
     const scopNow = clamp(num(val("scopNow", 3.2), 3.2), 2.2, 5.5);
-    const annualCostNow = Math.max(0, num(val("annualCostNow", 0), 0));
+    const annualCostNow = Math.max(0, moneyNum(val("annualCostNow", 0), 0));
 
     const wallInsTarget = clamp(num(val("wallInsTarget", 15), 15), 0, 50);
     const roofInsTarget = clamp(num(val("roofInsTarget", 25), 25), 0, 120);
@@ -931,10 +947,10 @@
 
     let bridge = clamp(num(val("bridge", 10), 10), 0, 25);
 
-    const costWallM2 = Math.max(0, num(val("costWallM2", 27500), 27500));
-    const costRoofM2 = Math.max(0, num(val("costRoofM2", 15000), 15000));
-    const costFloorM2 = Math.max(0, num(val("costFloorM2", 20000), 20000));
-    const costHeating = Math.max(0, num(val("costHeating", 3500000), 3500000));
+    const costWallM2 = Math.max(0, moneyNum(val("costWallM2", 27500), 27500));
+    const costRoofM2 = Math.max(0, moneyNum(val("costRoofM2", 15000), 15000));
+    const costFloorM2 = Math.max(0, moneyNum(val("costFloorM2", 20000), 20000));
+    const costHeating = Math.max(0, moneyNum(val("costHeating", 3500000), 3500000));
 
     // PRO auto bridge
     const p = readProInputs();
