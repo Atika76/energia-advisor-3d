@@ -196,9 +196,39 @@ h1{
 .tiny{font-size:12px}
 
 .headBtns{display:flex; gap:8px; flex-wrap:wrap}
+.modeChooser{
+  margin:0 0 16px;
+  padding:14px 16px;
+  border:1px solid rgba(115,190,255,.28);
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(25,105,165,.18),rgba(92,68,180,.14));
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.modeButtons{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.advancedOnly{display:none !important}
+body.modeAdvanced .advancedOnly{display:block !important}
+body.modeAdvanced .modeButtons .advancedOnly{display:inline-flex !important}
+.fieldHelp{display:block;color:var(--muted);font-size:11px;line-height:1.35;margin-top:5px}
+.confidenceBar{
+  margin:0 0 14px;
+  padding:10px 13px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(8,18,38,.34);
+  color:var(--muted);
+  font-size:12px;
+}
+.confidenceBar strong{color:#eaf6ff}
 
 .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
-@media (max-width: 920px){ .grid2{grid-template-columns:1fr} }
+@media (max-width: 920px){
+  .grid2{grid-template-columns:1fr}
+  .modeChooser{align-items:flex-start;flex-direction:column}
+  .modeButtons{justify-content:flex-start}
+}
 
 .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
 @media (max-width: 920px){ .grid3{grid-template-columns:1fr} }

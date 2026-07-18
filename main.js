@@ -60,6 +60,27 @@
     if (savingPerYear <= 0) return Infinity;
     return cost / savingPerYear;
   }
+  function discountedPaybackYears(cost, annualSaving, discountRatePct, growthRatePct, maxYears) {
+    if (!(cost > 0) || !(annualSaving > 0)) return cost <= 0 ? 0 : Infinity;
+    const discount = clamp(discountRatePct, 0, 100) / 100;
+    const growth = clamp(growthRatePct, -50, 100) / 100;
+    let cumulative = 0;
+    for (let year = 1; year <= maxYears; year++) {
+      const cash = annualSaving * Math.pow(1 + growth, year - 1);
+      cumulative += cash / Math.pow(1 + discount, year);
+      if (cumulative >= cost) return year;
+    }
+    return Infinity;
+  }
+  function netPresentValue(cost, annualSaving, discountRatePct, growthRatePct, years) {
+    const discount = clamp(discountRatePct, 0, 100) / 100;
+    const growth = clamp(growthRatePct, -50, 100) / 100;
+    let value = -Math.max(0, cost);
+    for (let year = 1; year <= years; year++) {
+      value += (annualSaving * Math.pow(1 + growth, year - 1)) / Math.pow(1 + discount, year);
+    }
+    return value;
+  }
   function fmtYears(y) {
     if (!Number.isFinite(y)) return "–";
     if (y > 99) return "99+ év";
@@ -107,7 +128,7 @@
 
     const btn = $("btnPro");
     if (btn) {
-      btn.textContent = PRO_ON ? "PRO ON" : "PRO OFF";
+      btn.textContent = PRO_ON ? "RÉSZLETES" : "RÉSZLETES";
       btn.style.background = PRO_ON ? "rgba(40,200,120,.22)" : "";
       btn.style.borderColor = PRO_ON ? "rgba(40,200,120,.55)" : "";
       btn.style.color = PRO_ON ? "#dfffee" : "";
@@ -116,6 +137,16 @@
 
     const note = $("proInlineNote");
     if (note) note.style.display = PRO_ON ? "" : "none";
+
+    document.body.classList.toggle("modeAdvanced", PRO_ON);
+    $("modeQuick")?.classList.toggle("active", !PRO_ON);
+    $("modeDetailed")?.classList.toggle("active", PRO_ON);
+    const modeDescription = $("modeDescription");
+    if (modeDescription) {
+      modeDescription.textContent = PRO_ON
+        ? "Részletesebb, fogyasztási és épületadatokkal, pénzügyi korrekciókkal számoló becslés."
+        : "Gyors, számlaadattal kalibrált előzetes becslés kevés adattal.";
+    }
 
     const proView = $("viewPro");
     if (proView) proView.style.opacity = PRO_ON ? "1" : "0.7";
@@ -197,21 +228,28 @@
 
   if (btnProGoCalc) btnProGoCalc.addEventListener("click", () => { location.hash = "#calc"; showView("calc"); });
 
-  // PRO gomb: kattintásra ON/OFF és PRO oldal megnyitása
+  $("modeQuick")?.addEventListener("click", () => {
+    setProUi(false);
+    if (EA_LAST) calcAll();
+    toast("Gyors becslés mód bekapcsolva.");
+  });
+  $("modeDetailed")?.addEventListener("click", () => {
+    setProUi(true);
+    if (EA_LAST) calcAll();
+    toast("Részletesebb számítás bekapcsolva.");
+  });
+  $("btnDetailedSettings")?.addEventListener("click", () => {
+    setProUi(true);
+    location.hash = "#pro";
+    showView("pro");
+  });
+
+  // A felső gomb a részletes épületadatok oldalát nyitja meg.
   if (btnPro) btnPro.addEventListener("click", () => {
-    const next = !PRO_ON;
-    setProUi(next);
-    if (next) {
-      location.hash = "#pro";
-      showView("pro");
-      toast("PRO bekapcsolva ✅");
-    } else {
-      toast("PRO kikapcsolva.");
-      location.hash = "#calc";
-      showView("calc");
-      // ha volt elemzés, frissítsük a kijelzett állapotot
-      if (EA_LAST) calcAll();
-    }
+    setProUi(true);
+    location.hash = "#pro";
+    showView("pro");
+    toast("Részletesebb számítás bekapcsolva.");
     renderProPanel();
   });
 
@@ -520,6 +558,8 @@
     heatingNow: "gas_old",
     scopNow: 3.2,
     annualCostNow: 0,
+    annualConsumptionNow: 0,
+    heatingShare: 85,
 
     wallInsTarget: 15,
     roofInsTarget: 25,
@@ -535,6 +575,13 @@
     costRoofM2: 15000,
     costFloorM2: 20000,
     costHeating: 3500000,
+    subsidy: 0,
+    maintenanceNow: 30000,
+    maintenanceTarget: 45000,
+    discountRate: 4,
+    energyGrowth: 3,
+    analysisYears: 25,
+    costUncertainty: 15,
 
     // PRO defaults (óvatos)
     proLen: 0,
@@ -570,6 +617,8 @@
     setVal("heatingNow", DEFAULTS.heatingNow);
     setVal("scopNow", DEFAULTS.scopNow);
     setVal("annualCostNow", DEFAULTS.annualCostNow);
+    setVal("annualConsumptionNow", DEFAULTS.annualConsumptionNow);
+    setVal("heatingShare", DEFAULTS.heatingShare);
 
     setVal("wallInsTarget", DEFAULTS.wallInsTarget);
     setVal("roofInsTarget", DEFAULTS.roofInsTarget);
@@ -587,6 +636,13 @@
     setVal("costRoofM2", DEFAULTS.costRoofM2);
     setVal("costFloorM2", DEFAULTS.costFloorM2);
     setVal("costHeating", DEFAULTS.costHeating);
+    setVal("subsidy", DEFAULTS.subsidy);
+    setVal("maintenanceNow", DEFAULTS.maintenanceNow);
+    setVal("maintenanceTarget", DEFAULTS.maintenanceTarget);
+    setVal("discountRate", DEFAULTS.discountRate);
+    setVal("energyGrowth", DEFAULTS.energyGrowth);
+    setVal("analysisYears", DEFAULTS.analysisYears);
+    setVal("costUncertainty", DEFAULTS.costUncertainty);
 
     // PRO
     setVal("proLen", DEFAULTS.proLen);
@@ -606,10 +662,11 @@
   const INPUT_IDS = [
     "area","storeys","height","wallType","winRatio","nAir",
     "wallInsNow","wallInsMat","roofInsNow","roofInsMat","floorInsNow","floorInsMat",
-    "heatingNow","scopNow","annualCostNow",
+    "heatingNow","scopNow","annualCostNow","annualConsumptionNow","heatingShare",
     "wallInsTarget","roofInsTarget","floorInsTarget","heatingTarget","scopTarget",
     "hdd","priceGas","priceEl","tariffProfile",
     "bridge","costWallM2","costRoofM2","costFloorM2","costHeating",
+    "subsidy","maintenanceNow","maintenanceTarget","discountRate","energyGrowth","analysisYears","costUncertainty",
     "proLen","proWid","proPerim","proRoofType","proPitch","proEaves",
     "proWinArea","proWinUTarget","proWinCost",
     "proYear"
@@ -933,6 +990,8 @@
     const heatingNow = val("heatingNow", "gas_old");
     const scopNow = clamp(num(val("scopNow", 3.2), 3.2), 2.2, 5.5);
     const annualCostNow = Math.max(0, moneyNum(val("annualCostNow", 0), 0));
+    const annualConsumptionNow = Math.max(0, moneyNum(val("annualConsumptionNow", 0), 0));
+    const heatingShare = clamp(num(val("heatingShare", 85), 85), 20, 100);
 
     const wallInsTarget = clamp(num(val("wallInsTarget", 15), 15), 0, 50);
     const roofInsTarget = clamp(num(val("roofInsTarget", 25), 25), 0, 120);
@@ -951,6 +1010,13 @@
     const costRoofM2 = Math.max(0, moneyNum(val("costRoofM2", 15000), 15000));
     const costFloorM2 = Math.max(0, moneyNum(val("costFloorM2", 20000), 20000));
     const costHeating = Math.max(0, moneyNum(val("costHeating", 3500000), 3500000));
+    const subsidy = Math.max(0, moneyNum(val("subsidy", 0), 0));
+    const maintenanceNow = Math.max(0, moneyNum(val("maintenanceNow", 30000), 30000));
+    const maintenanceTarget = Math.max(0, moneyNum(val("maintenanceTarget", 45000), 45000));
+    const discountRate = clamp(num(val("discountRate", 4), 4), 0, 20);
+    const energyGrowth = clamp(num(val("energyGrowth", 3), 3), -10, 30);
+    const analysisYears = clamp(Math.round(num(val("analysisYears", 25), 25)), 1, 40);
+    const costUncertainty = clamp(num(val("costUncertainty", 15), 15), 0, 50);
 
     // PRO auto bridge
     const p = readProInputs();
@@ -967,12 +1033,14 @@
       roofInsNow, roofInsMat,
       floorInsNow, floorInsMat,
       heatingNow, scopNow,
-      annualCostNow,
+      annualCostNow, annualConsumptionNow, heatingShare,
       wallInsTarget, roofInsTarget, floorInsTarget,
       heatingTarget, scopTarget,
       hdd, priceGas, priceEl,
       bridge,
       costWallM2, costRoofM2, costFloorM2, costHeating,
+      subsidy, maintenanceNow, maintenanceTarget,
+      discountRate, energyGrowth, analysisYears, costUncertainty,
       pro: p
     };
   }
@@ -1047,7 +1115,7 @@
       ((L.heatingChanged ? (L.inv?.heatCost || 0) : 0));
 
     const totalSave = L.savingYear || 0;
-    const totalPb = paybackYears(totalInv, totalSave);
+    const totalPb = L.finance?.simpleTotalPayback ?? paybackYears(totalInv, totalSave);
     // A kivitelezési sorrend nem azonos a legnagyobb önálló Ft/év megtakarítás
     // sorrendjével. Előbb a burok javításai következnek (rövidebb becsült
     // megtérüléssel kezdve), a fűtési rendszer méretezése/cseréje pedig utánuk.
@@ -1084,9 +1152,11 @@
         <div class="sectionTitle">Összesítés (MOST → CÉL)</div>
         <div style="margin-top:8px;">
           <b>Teljes beruházás:</b> ${fmtFt(totalInv)}<br/>
+          ${L.finance?.subsidy ? `<b>Támogatás után:</b> ${fmtFt(L.finance.netInvestment)}<br/>` : ""}
           <b>Teljes éves megtakarítás:</b> ${fmtFt(totalSave)} / év <span class="muted">(~ ${fmtFtShort(totalSave/12)} Ft/hó)</span><br/>
           <span class="muted">Becsült sáv: ${fmtFt(L.savingLow ?? totalSave * 0.85)} – ${fmtFt(L.savingHigh ?? totalSave * 1.15)} / év</span><br/>
-          <b>Teljes megtérülés:</b> ${fmtYears(totalPb)}
+          <b>Egyszerű megtérülés:</b> ${fmtYears(totalPb)}
+          ${L.finance ? `<br/><b>Diszkontált megtérülés:</b> ${fmtYears(L.finance.discountedPayback)}` : ""}
         </div>
       </div>
 
@@ -1168,11 +1238,12 @@
   // =========================
   function calcAll() {
     const x = readInputs();
-    if (!(x.annualCostNow > 0)) {
+    const useConsumption = PRO_ON && x.annualConsumptionNow > 0;
+    if (!(x.annualCostNow > 0) && !useConsumption) {
       setPlanUnlocked(false);
       EA_LAST = null;
-      renderResult('<div class="out"><div class="sectionTitle">Valós számlaadat szükséges</div><p>Add meg a tényleges éves fűtési költséget. Kitalált alapértékből a program nem készít megtérülési becslést.</p></div>');
-      toast("Add meg a valós éves fűtési költséget.");
+      renderResult('<div class="out"><div class="sectionTitle">Valós számla- vagy fogyasztási adat szükséges</div><p>Add meg a tényleges éves fűtési költséget, vagy részletes módban a fűtési célú éves kWh-fogyasztást.</p></div>');
+      toast("Adj meg valós költség- vagy fogyasztási adatot.");
       return false;
     }
 
@@ -1202,20 +1273,21 @@
 
     const Q_model_now = annualHeatDemandKWh(nowScenario.H.H, x.hdd);
 
-    const Q_real_now = heatDemandFromCost(
-      x.annualCostNow,
-      x.heatingNow,
-      x.priceGas,
-      x.priceEl,
-      x.scopNow
-    );
+    const costFromConsumption = useConsumption
+      ? x.annualConsumptionNow * (x.heatingNow === "hp" ? x.priceEl : x.priceGas)
+      : 0;
+    const costNow = useConsumption
+      ? costFromConsumption
+      : x.annualCostNow * (PRO_ON ? x.heatingShare / 100 : 1);
+    const Q_real_now = useConsumption
+      ? x.annualConsumptionNow * (x.heatingNow === "hp" ? x.scopNow : HEAT[x.heatingNow].eff)
+      : heatDemandFromCost(costNow, x.heatingNow, x.priceGas, x.priceEl, x.scopNow);
 
     const calib = (Q_model_now > 0) ? (Q_real_now / Q_model_now) : 1;
 
     const Q_model_target = annualHeatDemandKWh(targetScenario.H.H, x.hdd);
     const Q_real_target = Q_model_target * calib;
 
-    const costNow = x.annualCostNow;
     const costTarget = costFromHeatDemand(Q_real_target, x.heatingTarget, x.priceGas, x.priceEl, x.scopTarget);
 
     const savingYear = Math.max(0, costNow - costTarget);
@@ -1290,6 +1362,30 @@
     const pbHeat = heatingChanged ? paybackYears(inv.heatCost, saveOnlyHeat) : Infinity;
     const pbWin = hasWinUpgrade ? paybackYears(winCost, saveOnlyWin) : Infinity;
 
+    const totalInvestment = inv.wallCost + inv.roofCost + inv.floorCost +
+      (heatingChanged ? inv.heatCost : 0) + (hasWinUpgrade ? winCost : 0);
+    const netInvestment = Math.max(0, totalInvestment - (PRO_ON ? x.subsidy : 0));
+    const maintenanceDelta = PRO_ON ? (x.maintenanceNow - x.maintenanceTarget) : 0;
+    const firstYearNetSaving = Math.max(0, savingYear + maintenanceDelta);
+    const simpleTotalPayback = paybackYears(netInvestment, firstYearNetSaving);
+    const discountedPayback = PRO_ON
+      ? discountedPaybackYears(netInvestment, firstYearNetSaving, x.discountRate, x.energyGrowth, x.analysisYears)
+      : simpleTotalPayback;
+    const projectNpv = PRO_ON
+      ? netPresentValue(netInvestment, firstYearNetSaving, x.discountRate, x.energyGrowth, x.analysisYears)
+      : 0;
+    const costFactor = (PRO_ON ? x.costUncertainty : 15) / 100;
+    const paybackBest = paybackYears(netInvestment * (1 - costFactor), Math.max(0, savingHigh + maintenanceDelta));
+    const paybackWorst = paybackYears(netInvestment * (1 + costFactor), Math.max(0, savingLow + maintenanceDelta));
+
+    let confidenceScore = 1;
+    if (useConsumption) confidenceScore += 2;
+    if (PRO_ON && x.pro.proLen > 0 && x.pro.proWid > 0) confidenceScore += 2;
+    if (PRO_ON && x.pro.proWinArea > 0 && x.pro.proWinUTarget > 0) confidenceScore += 1;
+    if (PRO_ON && x.pro.proYear > 0) confidenceScore += 1;
+    if (PRO_ON && $("tariffProfile")?.value === "custom") confidenceScore += 1;
+    const confidence = confidenceScore >= 6 ? "Magasabb" : confidenceScore >= 3 ? "Közepes" : "Alap";
+
     const techNow = { Q_model: Q_model_now, Q_real: Q_real_now, H: nowScenario.H.H, U: nowScenario.U };
     const techTarget = { Q_model: Q_model_target, Q_real: Q_real_target, H: targetScenario.H.H, U: targetScenario.U };
 
@@ -1300,6 +1396,13 @@
       prio,
       inv: { ...inv, winCost },
       heatingChanged,
+      finance: {
+        totalInvestment, netInvestment, maintenanceDelta, firstYearNetSaving,
+        simpleTotalPayback, discountedPayback, projectNpv, paybackBest, paybackWorst,
+        discountRate: x.discountRate, energyGrowth: x.energyGrowth, analysisYears: x.analysisYears,
+        subsidy: PRO_ON ? x.subsidy : 0
+      },
+      confidence,
       invMap: {
         "Födém/padlás": inv.roofCost,
         "Fal": inv.wallCost,
@@ -1319,8 +1422,13 @@
       ? `<li><b>Ablak (PRO):</b> ${winAreaOverride > 0 ? (winAreaOverride.toFixed(1)+" m² (fix)") : (x.winRatio+"% (becsült)")} • U cél: <b>${winUOverrideTarget.toFixed(1)}</b></li>`
       : "";
 
+    const basisLine = useConsumption
+      ? `Fogyasztási kalibráció: <b>${fmtKwh(x.annualConsumptionNow)}</b> végsőenergia`
+      : `Költségalapú kalibráció: <b>${fmtFt(costNow)}</b> fűtési rész (${PRO_ON ? x.heatingShare : 100}%)`;
+
     const html = `
       <div class="sectionTitle">Eredmény</div>
+      <div class="confidenceBar"><strong>${PRO_ON ? "Részletesebb számítás" : "Gyors becslés"}</strong> • Adatbizalom: <strong>${confidence}</strong> • ${basisLine}</div>
 
       <div class="out" style="margin-top:10px;">
         <div class="sectionTitle">MOST → CÉL</div>
@@ -1345,7 +1453,7 @@
           <b>Különbség:</b> ${fmtFt(savingYear)} <span class="muted">~ ${fmtFtShort(savingMonth)} Ft/hó</span><br/>
           <span class="muted">Megtakarítási sáv: ${fmtFt(savingLow)} – ${fmtFt(savingHigh)} / év</span><br/>
           <b>Javulás (hőigény):</b> ${fmtPct(improve*100)}<br/>
-          <span class="muted">Magyarázat: a “MOST” Ft/év értékből visszaszámoljuk a MOST hőigényt, majd ugyanazzal a kalibrációval számoljuk a CÉL hőigényt.</span>
+          <span class="muted">Magyarázat: a megadott számla- vagy fogyasztási adatból kalibráljuk a jelenlegi hőigényt, majd ugyanazzal az épületkalibrációval számoljuk a célállapotot.</span>
         </div>
       </div>
 
@@ -1366,6 +1474,20 @@
           <li><b>Fűtés:</b> ${fmtFt(inv.heatCost)} → megtérülés: <b>${fmtYears(pbHeat)}</b> <span class="muted">(csak ha csere van)</span></li>
           ${hasWinUpgrade ? `<li><b>Ablak (PRO):</b> ${fmtFt(winCost)} → megtérülés: <b>${fmtYears(pbWin)}</b></li>` : ""}
         </ul>
+      </div>
+
+      <div class="out">
+        <div class="sectionTitle">${PRO_ON ? "Részletes pénzügyi eredmény" : "Összesített egyszerű megtérülés"}</div>
+        <div style="margin-top:6px;">
+          Teljes beruházás: <b>${fmtFt(totalInvestment)}</b><br/>
+          ${PRO_ON ? `Támogatás után finanszírozandó: <b>${fmtFt(netInvestment)}</b><br/>` : ""}
+          Első éves nettó megtakarítás: <b>${fmtFt(firstYearNetSaving)}</b><br/>
+          Egyszerű megtérülés: <b>${fmtYears(simpleTotalPayback)}</b><br/>
+          ${PRO_ON ? `Diszkontált megtérülés: <b>${fmtYears(discountedPayback)}</b><br/>
+          Becsült megtérülési sáv: <b>${fmtYears(paybackBest)} – ${fmtYears(paybackWorst)}</b><br/>
+          ${x.analysisYears} éves nettó jelenérték: <b>${fmtFt(projectNpv)}</b>` : ""}
+        </div>
+        <div class="muted tiny" style="margin-top:8px;">A pénzügyi sáv a megadott ár-, karbantartási, támogatási és energiaár-feltételekkel számol; nem végleges vállalási vagy megtérülési garancia.</div>
       </div>
 
       <details>
@@ -1421,14 +1543,18 @@
       });
 
       const Qm_now = annualHeatDemandKWh(nowSc.H.H, xx.hdd);
-      const Qr_now = heatDemandFromCost(xx.annualCostNow, xx.heatingNow, xx.priceGas, xx.priceEl, xx.scopNow);
+      const baseHeatingCost = x.annualCostNow * (PRO_ON ? x.heatingShare / 100 : 1);
+      const Qr_now = (PRO_ON && x.annualConsumptionNow > 0)
+        ? x.annualConsumptionNow * (x.heatingNow === "hp" ? x.scopNow : HEAT[x.heatingNow].eff)
+        : heatDemandFromCost(baseHeatingCost, x.heatingNow, x.priceGas, x.priceEl, x.scopNow);
       const calib = (Qm_now > 0) ? (Qr_now / Qm_now) : 1;
 
       const Qm_tar = annualHeatDemandKWh(tarSc.H.H, xx.hdd);
       const Qr_tar = Qm_tar * calib;
 
+      const costNowVariant = costFromHeatDemand(Qr_now, xx.heatingNow, xx.priceGas, xx.priceEl, xx.scopNow);
       const costTar = costFromHeatDemand(Qr_tar, xx.heatingTarget, xx.priceGas, xx.priceEl, xx.scopTarget);
-      const saving = Math.max(0, xx.annualCostNow - costTar);
+      const saving = Math.max(0, costNowVariant - costTar);
       return saving;
     };
 
@@ -1693,7 +1819,9 @@
       explain = "KÜLÖNBSÉG: az egyes elemek számított veszteségcsökkenését mutatja. A 0 W/K itt azt jelenti, hogy az adott elem beállítása nem változott, nem azt, hogy nincs hővesztesége.";
     }
 
-    const maxPart = keys.reduce((m,k)=> Math.max(m, parts[k]||0), 0) || 1;
+    // MOST és CÉL mindig ugyanazt az abszolút skálát használja. Így a célállapot
+    // kisebb vesztesége nem színeződik félrevezetően ugyanolyan erősre.
+    const maxPart = keys.reduce((m,k)=> Math.max(m, partsNow[k]||0, partsTar[k]||0), 0) || 1;
     const ratios = {};
     keys.forEach(k => {
       const raw = (parts[k]||0) / maxPart;
@@ -1723,7 +1851,11 @@
         k,
         label: labelMap[k],
         val: parts[k] || 0,
-        pct: ((parts[k]||0) / total) * 100
+        pct: hmMode === "delta"
+          ? ((partsNow[k] || 0) > 0 ? ((parts[k] || 0) / partsNow[k]) * 100 : 0)
+          : ((parts[k]||0) / total) * 100,
+        before: partsNow[k] || 0,
+        after: partsTar[k] || 0
       }))
       .sort((a,b)=> b.val - a.val);
 
@@ -1733,13 +1865,22 @@
           <div>${r.label}</div>
           <div>${fmtPct(r.pct)}</div>
         </div>
-        <div class="hmBar"><div class="hmFill" style="width:${Math.round(r.pct)}%"></div></div>
-        <div class="hmMeta">H hozzájárulás: <b>${r.val.toFixed(0)} W/K</b></div>
+        <div class="hmBar"><div class="hmFill" style="width:${Math.round(clamp(r.pct,0,100))}%"></div></div>
+        <div class="hmMeta">${hmMode === "delta"
+          ? `Csökkenés: <b>${r.val.toFixed(0)} W/K</b> • ${r.before.toFixed(0)} → ${r.after.toFixed(0)} W/K`
+          : `H hozzájárulás: <b>${r.val.toFixed(0)} W/K</b>`}</div>
       </div>
     `).join("");
 
     const ex = $("hmExplain");
     if (ex) ex.textContent = explain;
+    const scale = $("hmScaleInfo");
+    if (scale) {
+      const totalNow = keys.reduce((s,k)=>s+(partsNow[k]||0),0);
+      const totalTarget = keys.reduce((s,k)=>s+(partsTar[k]||0),0);
+      const reduction = totalNow > 0 ? (1-totalTarget/totalNow)*100 : 0;
+      scale.innerHTML = `<strong>Közös abszolút színskála</strong> • MOST: <strong>${totalNow.toFixed(0)} W/K</strong> • CÉL: <strong>${totalTarget.toFixed(0)} W/K</strong> • Csökkenés: <strong>${fmtPct(reduction)}</strong> • Adatbizalom: <strong>${EA_LAST?.confidence || (PRO_ON ? "Közepes" : "Alap")}</strong>`;
+    }
   }
 
   // ---------- initByHash ----------

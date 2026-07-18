@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Energia Advisor 3D</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20260718-1" />
 </head>
 <body>
   <div class="bg"></div>
@@ -26,7 +26,7 @@
       <button id="btnDocs" class="navBtn">Tudástár</button>
 
       <!-- PRO gomb: 1 db, zöldre vált ha ON -->
-      <button id="btnPro" class="navBtn" title="PRO: geometria + tetőforma + extra pontosság">PRO OFF</button>
+      <button id="btnPro" class="navBtn" title="Részletes épületadatok és pontosabb becslés">RÉSZLETES</button>
     </nav>
   </header>
 
@@ -76,7 +76,7 @@
           <div class="sectionTitle">Energia kalkulátor (Jelenlegi → Cél)</div>
           <div class="muted">Add meg a mostani állapotot és a cél állapotot. A megtakarítás és megtérülés a különbségből jön.</div>
           <div id="proInlineNote" class="muted tiny" style="margin-top:6px; display:none;">
-            <b>PRO ON:</b> Geometria + tetőforma aktív. Részletek: PRO fül.
+            <b>Részletesebb mód:</b> fogyasztás, geometria, tetőforma és pénzügyi korrekciók aktívak.
           </div>
         </div>
 
@@ -89,6 +89,18 @@
           <button id="btnImportState" class="btn ghost">⬆️ Import</button>
 
           <button id="btnExportPDF" class="btn primary">🖨️ PDF</button>
+        </div>
+      </div>
+
+      <div class="modeChooser" role="group" aria-label="Számítás részletessége">
+        <div>
+          <div class="panelTitle">Számítás részletessége</div>
+          <div id="modeDescription" class="muted tiny">Gyors, számlaadattal kalibrált előzetes becslés kevés adattal.</div>
+        </div>
+        <div class="modeButtons">
+          <button id="modeQuick" class="chipBtn active" type="button">Gyors becslés</button>
+          <button id="modeDetailed" class="chipBtn" type="button">Részletesebb számítás</button>
+          <button id="btnDetailedSettings" class="btn ghost advancedOnly" type="button">Részletes épületadatok</button>
         </div>
       </div>
 
@@ -120,11 +132,11 @@
             </select>
           </label>
 
-          <label class="field">Ablak arány a falfelülethez (%)
+          <label class="field advancedOnly">Ablak arány a falfelülethez (%)
             <input id="winRatio" type="number" min="5" max="35" step="1" />
           </label>
 
-          <label class="field">Légcsere (1/h)
+          <label class="field advancedOnly">Légcsere (1/h)
             <input id="nAir" type="number" min="0.2" max="1.2" step="0.1" />
           </label>
 
@@ -132,7 +144,7 @@
             <input id="wallInsNow" type="number" min="0" max="30" step="1" />
           </label>
 
-          <label class="field">Fal szigetelés anyag
+          <label class="field advancedOnly">Fal szigetelés anyag
             <select id="wallInsMat">
               <option value="eps">EPS</option>
               <option value="rockwool">Kőzetgyapot</option>
@@ -144,7 +156,7 @@
             <input id="roofInsNow" type="number" min="0" max="60" step="1" />
           </label>
 
-          <label class="field">Födém szigetelés anyag
+          <label class="field advancedOnly">Födém szigetelés anyag
             <select id="roofInsMat">
               <option value="rockwool">Kőzetgyapot</option>
               <option value="eps">EPS</option>
@@ -156,7 +168,7 @@
             <input id="floorInsNow" type="number" min="0" max="20" step="1" />
           </label>
 
-          <label class="field">Padló szigetelés anyag
+          <label class="field advancedOnly">Padló szigetelés anyag
             <select id="floorInsMat">
               <option value="xps">XPS</option>
               <option value="eps">EPS</option>
@@ -172,12 +184,22 @@
             </select>
           </label>
 
-          <label class="field">Hőszivattyú SCOP (ha HP)
+          <label class="field advancedOnly">Hőszivattyú SCOP (ha HP)
             <input id="scopNow" type="number" min="2.2" max="5.5" step="0.1" />
           </label>
 
           <label class="field">Éves fűtési költség MOST (Ft/év)
             <input id="annualCostNow" type="text" inputmode="numeric" autocomplete="off" placeholder="pl. 500 000 vagy 500.000" />
+          </label>
+
+          <label class="field advancedOnly">Fűtési célú éves fogyasztás (kWh/év, opcionális)
+            <input id="annualConsumptionNow" type="text" inputmode="numeric" autocomplete="off" placeholder="A gáz- vagy villanyszámláról" />
+            <span class="fieldHelp">Ha megadod, ez lesz a kalibráció elsődleges alapja.</span>
+          </label>
+
+          <label class="field advancedOnly">Fűtés részaránya az éves költségből (%)
+            <input id="heatingShare" type="number" min="20" max="100" step="1" />
+            <span class="fieldHelp">A melegvíz, főzés és egyéb fogyasztás leválasztására.</span>
           </label>
 
           <div class="tiny muted">
@@ -208,23 +230,23 @@
             </select>
           </label>
 
-          <label class="field">Hőszivattyú SCOP CÉL (ha HP)
+          <label class="field advancedOnly">Hőszivattyú SCOP CÉL (ha HP)
             <input id="scopTarget" type="number" min="2.2" max="5.5" step="0.1" />
           </label>
 
-          <label class="field">HDD (fűtési foknap, HU átlag)
+          <label class="field advancedOnly">HDD (fűtési foknap, települési érték)
             <input id="hdd" type="number" min="1800" max="4500" step="50" />
           </label>
 
-          <label class="field">Gáz átlagár a számlából (Ft/kWh)
+          <label class="field advancedOnly">Gáz átlagár a számlából (Ft/kWh)
             <input id="priceGas" type="number" min="5" max="120" step="0.1" />
           </label>
 
-          <label class="field">Villany átlagár a számlából (Ft/kWh)
+          <label class="field advancedOnly">Villany átlagár a számlából (Ft/kWh)
             <input id="priceEl" type="number" min="20" max="180" step="0.1" />
           </label>
 
-          <label class="field">Gyors tarifa-beállítás
+          <label class="field advancedOnly">Gyors tarifa-beállítás
             <select id="tariffProfile">
               <option value="discounted">Kedvezményes lakossági közelítő érték</option>
               <option value="market">Magasabb lakossági ársáv</option>
@@ -232,8 +254,8 @@
             </select>
           </label>
 
-          <details class="details">
-            <summary>▶ Haladó: költségek / korrekciók (ajánlott)</summary>
+          <details class="details advancedOnly">
+            <summary>▶ Beruházási és pénzügyi korrekciók</summary>
 
             <label class="field">Hőhíd korrekció (%)
               <input id="bridge" type="number" min="0" max="25" step="1" />
@@ -254,6 +276,34 @@
             <label class="field">Fűtéscsere (Ft)
               <input id="costHeating" type="text" inputmode="numeric" autocomplete="off" />
             </label>
+
+            <div class="grid3">
+              <label class="field">Támogatás / vissza nem térítendő összeg (Ft)
+                <input id="subsidy" type="text" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label class="field">Jelenlegi éves karbantartás (Ft)
+                <input id="maintenanceNow" type="text" inputmode="numeric" autocomplete="off" />
+              </label>
+              <label class="field">Célrendszer éves karbantartása (Ft)
+                <input id="maintenanceTarget" type="text" inputmode="numeric" autocomplete="off" />
+              </label>
+            </div>
+
+            <div class="grid3">
+              <label class="field">Diszkontráta (%)
+                <input id="discountRate" type="number" min="0" max="20" step="0.1" />
+              </label>
+              <label class="field">Energiaár éves változása (%)
+                <input id="energyGrowth" type="number" min="-10" max="30" step="0.1" />
+              </label>
+              <label class="field">Vizsgált időtáv (év)
+                <input id="analysisYears" type="number" min="1" max="40" step="1" />
+              </label>
+            </div>
+
+            <label class="field">Beruházási ár bizonytalansága (±%)
+              <input id="costUncertainty" type="number" min="0" max="50" step="1" />
+            </label>
           </details>
           <div id="referencePriceNote" class="muted tiny">A beruházási árak nettó tájékoztató értékek; a falár a SzakiPiac referencia-adatbázisából frissül.</div>
 
@@ -265,7 +315,7 @@
           </div>
 
           <div class="muted tiny">
-            Fontos: a MOST költséget (Ft/év) te adod meg — ezt tekintjük “valós” bázisnak.
+            Fontos: a megadott számla- vagy fogyasztási adat kalibrálja a becslést. A részletesebb mód sem helyettesít helyszíni energetikai felmérést.
           </div>
         </div>
       </div>
@@ -280,8 +330,8 @@
     <section id="viewPro" class="card" style="display:none;">
       <div class="sectionHead">
         <div>
-          <div class="sectionTitle">PRO mód: Geometria + tetőforma + pontosság</div>
-          <div class="muted">PRO ON esetén a kalkulátor a megadott méretekből számol (alapterület, kerület, tetőfelület, ablak m²).</div>
+          <div class="sectionTitle">Részletesebb számítás: épületadatok</div>
+          <div class="muted">A kalkulátor a megadott valós méretekből számol: geometria, kerület, tetőfelület, ablak és hőhíd.</div>
         </div>
         <div class="headBtns">
           <button id="btnProGoCalc" class="btn ghost">↩︎ Vissza a kalkulátorhoz</button>
@@ -346,7 +396,7 @@
       </div>
 
       <div class="panel" style="margin-top:14px;">
-        <div class="panelTitle">3) Automatikus hőhíd javaslat (realitás)</div>
+          <div class="panelTitle">3) Automatikus hőhíd-javaslat</div>
 
         <div class="grid3">
           <label class="field">Építési év (opcionális)
@@ -367,14 +417,14 @@
       </div>
 
       <div class="panel" style="margin-top:14px;">
-        <div class="panelTitle">4) Szenzitivitás (bizalomnövelő)</div>
+        <div class="panelTitle">4) Érzékenységvizsgálat</div>
         <div class="muted tiny">Megmutatja, mennyire érzékeny a megtakarítás az energiaárra és a SCOP-ra (±20%).</div>
         <div id="proSensitivity" class="out" style="margin-top:10px;">–</div>
       </div>
 
       <div class="out" style="margin-top:14px;">
         <div class="muted">
-          PRO tipp: ha kész, menj vissza a Kalkulátorba és nyomj <b>Elemzés</b>-t – a PRO geometria automatikusan be fog számolni.
+          Ha kész, menj vissza a Kalkulátorba és nyomj <b>Elemzés</b>-t – a részletes épületadatok automatikusan bekerülnek a számításba.
         </div>
       </div>
     </section>
@@ -404,8 +454,8 @@
     <section id="view3d" class="card" style="display:none;">
       <div class="sectionHead">
         <div>
-          <div class="sectionTitle">Hőveszteségi arányábra (becslés)</div>
-          <div class="muted">A számított ábra a megadott adatokból becsüli a fal / ablak / födém / padló / légcsere arányát. Nem hőkamerás felvétel és nem energetikai tanúsítvány. Válts: MOST • CÉL • KÜLÖNBSÉG.</div>
+          <div class="sectionTitle">Számított hőveszteségi térkép</div>
+          <div class="muted">A MOST és CÉL nézet közös színskálán mutatja a fal / ablak / födém / padló / légcsere veszteségét. Nem hőkamerás felvétel és nem energetikai tanúsítvány.</div>
         </div>
         <div class="headBtns">
           <button id="btnExportPDF_3D" class="btn ghost">🖨️ PDF</button>
@@ -418,6 +468,7 @@
         <button id="hmModeDelta" class="chipBtn">KÜLÖNBSÉG</button>
         <div class="muted">Tipp: módosíts a kalkulátorban, majd gyere vissza ide – automatikusan frissül.</div>
       </div>
+      <div id="hmScaleInfo" class="confidenceBar">Közös skála betöltése…</div>
 
       <div class="grid2 hmGrid">
         <div class="panel">
@@ -501,6 +552,6 @@
 
   <input id="eaImportFile" type="file" accept="application/json" style="display:none" />
 
-  <script src="main.js"></script>
+  <script src="main.js?v=20260718-1"></script>
 </body>
 </html>
