@@ -14,7 +14,7 @@
       <div class="logo">EA</div>
       <div class="brandText">
         <div class="brandTitle">Energia Advisor 3D</div>
-        <div class="brandSub">MVP • valós (C) kalkulátor • később SzakiPiacba integrálható</div>
+        <div class="brandSub">Számlaadattal kalibrált becslés • SzakiPiac referenciaárakkal</div>
       </div>
     </div>
 
@@ -34,7 +34,7 @@
     <!-- HOME -->
     <section id="viewHome" class="card hero">
       <div class="heroLeft">
-        <div class="pill">Valós(abb) becslés • Jelenlegi → Cél • HU átlag HDD</div>
+        <div class="pill">Ellenőrizhető becslési sáv • Jelenlegi → Cél • állítható HDD</div>
         <h1>Érthető energia-spórolás<br/><span class="grad">számokkal alátámasztva.</span></h1>
         <p class="lead">
           Add meg a mostani állapotot és a cél állapotot. A rendszer megmutatja a különbséget:
@@ -216,12 +216,20 @@
             <input id="hdd" type="number" min="1800" max="4500" step="50" />
           </label>
 
-          <label class="field">Gáz ár (Ft/kWh)
-            <input id="priceGas" type="number" min="10" max="120" step="1" />
+          <label class="field">Gáz átlagár a számlából (Ft/kWh)
+            <input id="priceGas" type="number" min="5" max="120" step="0.1" />
           </label>
 
-          <label class="field">Villany ár (Ft/kWh)
-            <input id="priceEl" type="number" min="20" max="180" step="1" />
+          <label class="field">Villany átlagár a számlából (Ft/kWh)
+            <input id="priceEl" type="number" min="20" max="180" step="0.1" />
+          </label>
+
+          <label class="field">Gyors tarifa-beállítás
+            <select id="tariffProfile">
+              <option value="discounted">Kedvezményes lakossági közelítő érték</option>
+              <option value="market">Magasabb lakossági ársáv</option>
+              <option value="custom">Egyéni – a számlám szerinti átlag</option>
+            </select>
           </label>
 
           <details class="details">
@@ -232,13 +240,13 @@
             </label>
 
             <div class="grid3">
-              <label class="field">Fal (Ft/m² / 10cm)
+              <label class="field">Fal komplett célrendszer (nettó Ft/m²)
                 <input id="costWallM2" type="number" min="0" step="500" />
               </label>
-              <label class="field">Födém (Ft/m² / 10cm)
+              <label class="field">Födém komplett kivitelezés (nettó Ft/m²)
                 <input id="costRoofM2" type="number" min="0" step="500" />
               </label>
-              <label class="field">Padló (Ft/m² / 10cm)
+              <label class="field">Padló komplett kivitelezés (nettó Ft/m²)
                 <input id="costFloorM2" type="number" min="0" step="500" />
               </label>
             </div>
@@ -247,6 +255,7 @@
               <input id="costHeating" type="number" min="0" step="50000" />
             </label>
           </details>
+          <div id="referencePriceNote" class="muted tiny">A beruházási árak nettó tájékoztató értékek; a falár a SzakiPiac referencia-adatbázisából frissül.</div>
 
           <div class="calcBtns">
             <button id="btnCalcRun" class="btn primary">Elemzés</button>
@@ -395,8 +404,8 @@
     <section id="view3d" class="card" style="display:none;">
       <div class="sectionHead">
         <div>
-          <div class="sectionTitle">Profi hőtérkép (MVP)</div>
-          <div class="muted">A hőtérkép a kalkulátor adataiból számol: fal / ablak / födém / padló / légcsere. Válts: MOST • CÉL • KÜLÖNBSÉG.</div>
+          <div class="sectionTitle">Hőveszteségi arányábra (becslés)</div>
+          <div class="muted">A számított ábra a megadott adatokból becsüli a fal / ablak / födém / padló / légcsere arányát. Nem hőkamerás felvétel és nem energetikai tanúsítvány. Válts: MOST • CÉL • KÜLÖNBSÉG.</div>
         </div>
         <div class="headBtns">
           <button id="btnExportPDF_3D" class="btn ghost">🖨️ PDF</button>
@@ -412,7 +421,7 @@
 
       <div class="grid2 hmGrid">
         <div class="panel">
-          <div class="panelTitle">Ház – hőveszteség vizuálisan</div>
+          <div class="panelTitle">Ház – számított hőveszteség vizuálisan</div>
 
           <div class="hmBox">
             <div class="hmHouse">
@@ -435,7 +444,7 @@
           </div>
 
           <div class="muted" style="margin-top:10px;">
-            A színezés az egyes elemek <b>H (W/K) hozzájárulásán</b> alapul (UA + Hvent), hőhíd-korrekcióval.
+            A színezés az egyes elemek <b>becsült H (W/K) hozzájárulásán</b> alapul (UA + Hvent), egyszerűsített hőhíd-korrekcióval.
           </div>
 
           <div class="miniCard" style="margin-top:14px;">
